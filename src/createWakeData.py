@@ -54,6 +54,38 @@ class wake:
     0.64, 0.87, 1.00, 1.15,
     0.61, 0.80, 0.90, 1.06
     ]
+    xw2=[-180,-150,-130,-110,-90,-75,-65,-50,-45,-35,-15,-5,0,
+         5,15,35,45,50,65,75,90,110,130,150,180]
+    fw2 = [
+    1.00,    1.00,
+    0.85,    0.99,
+    0.61,    0.95,
+    0.17,    0.83,
+    -0.26,   0.65,
+    -0.50,   0.42,
+    -0.40,   0.12,
+    -0.07,  -0.48,
+    0.03,   -0.50,
+    0.25,    0.03,
+    0.71,    0.88,
+    0.90,    1.00,
+    1.00,    1.00,
+    1.00,    0.90,
+    0.88,    0.71,
+    0.03,    0.25,
+    -0.50,   0.03,
+    -0.48,  -0.07,
+    0.12,   -0.40,
+    0.42,   -0.50,
+    0.65,   -0.26,
+    0.83,    0.17,
+    0.95,    0.61,
+    0.99,    0.85,
+    1.00,    1.00
+    ]
+    xw3 = [-60,-40,-30,-20,-10,0,10,20,30,40,60]
+    fw3= [ .16,.09,.06,.03,.01,.0,.01,.03,.06,.09,.16]
+
     ft1 = [
     1.15, 1.60, 1.60, 2.00,
     2.15, 2.35, 3.00, 4.05,
@@ -260,12 +292,25 @@ class wake:
 
         for ix in range(len(self.xw1)):
             print (f"{self.xw1[ix]} {wakeTable[ix]}")
+    
+    def wakeTablePDIR(self):
+        fw2 = np.reshape(self.fw2,(len(self.xw2),2))
+
+        print ("WAKE-PROPL-PDIR")
+        for ix in range(len(self.xw2)):
+            print(f"{self.xw2[ix]}  {fw2[ix][0]} {fw2[ix][1]}")
 
     def thrustDeductionTable(self):
         ft1 = np.reshape(self.ft1,(19,4))
         thrustDeductionTable = ft1[:,0]* self.thrustDeduction
         for ix in range(len(self.xw1)):
             print (f"{self.xw1[ix]} {thrustDeductionTable[ix]}")
+            
+    def wakeDeltaRAS(self):
+        print ("WAKEF-DELTA-RAS")
+        for ix in range(len(self.xw3)):
+            print(f"{self.xw3[ix]} {self.fw3[ix]}")
+
 
         
 
@@ -281,5 +326,6 @@ if __name__ == '__main__':
     #print (f" Wake for D ={propellerDiameter} = {wake}")
     #aWake.wakeTable()
     print(f" Thrust deduction for D = {propellerDiameter}  , {thrde}")
-    aWake.thrustDeductionTable()
+    #aWake.thrustDeductionTable()
+    aWake.wakeTablePDIR()
     pass
