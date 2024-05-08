@@ -54,37 +54,73 @@ class wake:
     0.64, 0.87, 1.00, 1.15,
     0.61, 0.80, 0.90, 1.06
     ]
-    def __init__(self,propellerDiameter,nrprop):
+    ft1 = [
+    1.15, 1.60, 1.60, 2.00,
+    2.15, 2.35, 3.00, 4.05,
+    2.40, 2.60, 3.45, 4.75,
+    2.00, 2.35, 3.10, 4.50,
+    1.50, 1.80, 2.50, 3.55,
+    0.95, 1.35, 1.85, 2.60,
+    0.26, 0.43, 0.64, 0.95,
+    0.80, 1.05, 1.20, 1.45,
+    1.00, 1.20, 1.40, 1.70,
+    1.00, 1.25, 1.47, 1.80,
+    1.30, 1.60, 1.83, 2.20,
+    1.53, 1.80, 2.00, 2.40,
+    1.70, 1.80, 1.80, 1.00,
+    1.70, 1.60, 0.30, -2.00,
+    1.55, 1.25, -2.05, -3.20,
+    0.90, -1.20, -2.10, -2.40,
+    -0.40, -1.40, -1.40, -1.40,
+    -0.30, -0.50, -0.50, -0.50,
+    0.61, 0.80, 0.90, 2.00
+]
+    def __init__(self,shipnr,propellerDiameter=None):
  
-
-        lengthWaterLine = 346.3 
-        beam = 53.5
-        pRatio = .98
-        wettedSurface = 23243.8
-        self.nrProp = nrprop
-        self.displacement = 218220.0
-        self.wettedSurface = wettedSurface
-        self.propellerDiameter = propellerDiameter
-        self.lengthWaterLine = lengthWaterLine 
-        self.beam = beam
-        self.draftAft = 17.
-        self.draftFore = 17
+        self.read_SY1Data(shipnr)
+        self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
+        self.beam = 53.5  ## get from shipDataLibg
+        self.pRatio = self.ship_data['Propeller_Area_Ratio']
+        self.wettedSurface = 23243.8  ## get from shipDataLibg
+        self.PD = 0.77  ## get from shipDataLibg
+        self.nrProp = self.ship_data['number_of_propellers']
+        self.displacement = 218220.0 ## get from shipDataLibg
+        
+        if propellerDiameter:
+            self.propellerDiameter = propellerDiameter ## get from shipDataLibg
+        else:
+            self.propellerDiameter = 7 ## get from shipData
+        self.draftAft = 17. ## get from shipData
+        self.draftFore = 17. ## get from shipData
         self.meanDraft =(self.draftAft + self.draftFore)/2.0
         self.waterLineBlock = self.displacement /(self.lengthWaterLine*self.beam*self.meanDraft) # waterline block coefficient
         print('hardcoded some values here for now')
-        self.speed = 10.8548
-        self.Formal = 1.21268
-        self.viscocity = 1.34066
-        self.prismaticCoefficeint = 0.70699
-        self.midshipSection = 0.98
-        self.Abulb = 0.004
-        self.verticalCenterBulb = 5.0 #Vertical position of center of bulb from BL, m 
-        self.LCB_ratio = 0.00612186
-        self.Fmxaft = 0
+        self.speed = self.ship_data['service_speed']
+        self.Formal = self.ship_data['Total_FormFactor'] ## 1.21268
+        self.viscocity = self.ship_data['viscocity'] ##1.34066
+        self.prismaticCoefficeint = self.ship_data['Prismatic_Coefficient'] ##0.70699
+        self.midshipSection = self.ship_data['midshipSection'] ##0.98
+        self.Abulb = self.ship_data['BulbArea'] ##0.004
+        self.verticalCenterBulb = self.ship_data['verticalCenterBulb']## 5.0 #Vertical position of center of bulb from BL, m 
+        self.LCB_ratio = self.ship_data['LCB_ratio'] ##0.00612186
+        self.Fmxaft = self.ship_data['FormFactorStern']
 
         #self.areaRatio = aRatio
        # self.Displacement = 100000
         #self.Cp = self.Displacement / (self.lengthWaterLine * self.crossSectionArea) #
+    def read_SY1Data(self, shipnr):
+        self.ship_data = {}
+        # Assuming the data is in a file called 'data.txt'
+        with open(f'U:/ships/ship{shipnr}/ShipYardData{shipnr}.dat', 'r') as file:
+            for line in file:
+                line = line.strip()
+                if line.find("##") == 0 or len(line)==0:
+                    continue
+                # Split the line into key and value
+                key, value = line.split()
+                # Convert the value to a float and add it to the dictionary
+                self.ship_data[key] = float(value)
+
     def R1(self):
         L9 = self.lengthWaterLine 
         Visco = self.viscocity
@@ -151,7 +187,6 @@ class wake:
         K6r = self.verticalCenterBulb
         L9 = self.lengthWaterLine
         C8 = self.waterLineBlock
-
         Cx3=.56*Xbulb**1.5/(B9*T9*(.31*np.sqrt(Xbulb)+Fmfore-K6r))
         Cx2=(-1.89)*np.sqrt(Cx3)
 
@@ -173,6 +208,7 @@ class wake:
         L9 = self.lengthWaterLine
         Fmaft = self.draftAft
         C9 = self.prismaticCoefficeint
+        T9 = self.meanDraft
         Cv = self.Cv()
         Cx11 = self.Cx11()
         Cp1 = self.Cp1()
@@ -189,6 +225,34 @@ class wake:
                     +.27915*np.sqrt(B9/L9/(1.0-Cp1))+Cx19)
         self.wake = wake
         return wake
+
+    def thrustDeduction(self):
+        B9 = self.beam
+        L9 = self.lengthWaterLine
+        T9 = self.meanDraft
+        C9 = self.prismaticCoefficeint
+        Diam = self.propellerDiameter
+        O1 = self.LCB_ratio
+        Fmxaft = self.Fmxaft
+        T5=.25014*(B9/L9)**.28956*(np.sqrt(B9*T9)/Diam)**.2624/   \
+                         (1-C9+2.25*O1)**.01762+.005*Fmxaft
+        if self.nrProp == 2:
+            T5 = .325*C8-.1885*Diam/np.sqrt(B9*T9)
+        self.thrustDeduction = T5
+        return self.thrustDeduction
+    
+    def relativeRotativeEfficiency(self):
+        Y = self.pRatio
+        C9 = self.prismaticCoefficeint
+        O1 = self.LCB_ratio
+        X = self.PD
+
+        E7=.9922-.05908*Y+.07424*(C9-2.25*O1)
+        if self.nrProp == 2:
+            E7=.9737+.111*(C9-2.25*O1)-.06325*X
+        return E7
+
+    
         
     def wakeTable(self):
         fw1=np.reshape(self.fw1,(19,4))
@@ -197,16 +261,25 @@ class wake:
         for ix in range(len(self.xw1)):
             print (f"{self.xw1[ix]} {wakeTable[ix]}")
 
+    def thrustDeductionTable(self):
+        ft1 = np.reshape(self.ft1,(19,4))
+        thrustDeductionTable = ft1[:,0]* self.thrustDeduction
+        for ix in range(len(self.xw1)):
+            print (f"{self.xw1[ix]} {thrustDeductionTable[ix]}")
+
         
 
 
 
 if __name__ == '__main__':
-    propellerDiameter = 10
+    propellerDiameter = 7
     nProps = 1
-    aWake = wake(propellerDiameter,nProps)
+    ship_nr = 3949
+    aWake = wake(ship_nr,propellerDiameter)
     wake  = aWake.wakeCalculation()
-    print (f" Wake for D ={propellerDiameter} = {wake}")
-
-    aWake.wakeTable()
+    thrde = aWake.thrustDeduction()
+    #print (f" Wake for D ={propellerDiameter} = {wake}")
+    #aWake.wakeTable()
+    print(f" Thrust deduction for D = {propellerDiameter}  , {thrde}")
+    aWake.thrustDeductionTable()
     pass
