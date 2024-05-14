@@ -1,4 +1,7 @@
+# %%
 import numpy as np
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 '''
 c
@@ -110,24 +113,26 @@ class wake:
     def __init__(self,shipnr,propellerDiameter=None):
  
         self.read_SY1Data(shipnr)
+        print('hardcoded some values here for now')
         self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
-        self.beam = 53.5  ## get from shipDataLibg
+        self.beam = 53.5  ## get from shipDataLib
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
-        self.wettedSurface = 23243.8  ## get from shipDataLibg
-        self.PD = 0.77  ## get from shipDataLibg
+        self.wettedSurface = 23243.8  ## get from shipDataLib
+        self.PD = 0.71505  ## get from shipDataLib
         self.nrProp = self.ship_data['number_of_propellers']
-        self.displacement = 218220.0 ## get from shipDataLibg
-        
+        self.displacement = 218220.0 ## get from shipDataLib
+        self.serviceSpeed = self.ship_data['service_speed']
+        self.propeller_revs_serviceSpeed = self.ship_data['propeller_revs_serviceSpeed']
         if propellerDiameter:
-            self.propellerDiameter = propellerDiameter ## get from shipDataLibg
+            self.propellerDiameter = propellerDiameter ## get from shipDataLib
         else:
             self.propellerDiameter = 7 ## get from shipData
         self.draftAft = 17. ## get from shipData
         self.draftFore = 17. ## get from shipData
         self.meanDraft =(self.draftAft + self.draftFore)/2.0
         self.waterLineBlock = self.displacement /(self.lengthWaterLine*self.beam*self.meanDraft) # waterline block coefficient
-        print('hardcoded some values here for now')
-        self.speed = self.ship_data['service_speed']
+    
+       
         self.Formal = self.ship_data['Total_FormFactor'] ## 1.21268
         self.viscocity = self.ship_data['viscocity'] ##1.34066
         self.prismaticCoefficeint = self.ship_data['Prismatic_Coefficient'] ##0.70699
@@ -156,7 +161,7 @@ class wake:
     def R1(self):
         L9 = self.lengthWaterLine 
         Visco = self.viscocity
-        V5 = self.speed
+        V5 = self.serviceSpeed
         if V5 <= 1:
             return L9/Visco*1000000
         else:
@@ -289,9 +294,14 @@ class wake:
     def wakeTable(self):
         fw1=np.reshape(self.fw1,(19,4))
         wakeTable = fw1[:,0]*self.wake
-
+        print ('Adjusting wake ')
+        betap = np.arctan2(self.serviceSpeed,.7*3.141592654*self.propeller_revs_serviceSpeed*self.propellerDiameter)
+        betap = np.degrees(betap)
+        f = interp1d(self.xw1,wakeTable,kind='linear')
+        fval = f(betap)
+        fac= self.wake/fval
         for ix in range(len(self.xw1)):
-            print (f"{self.xw1[ix]} {wakeTable[ix]}")
+            print (f"{self.xw1[ix]} {wakeTable[ix]*fac}")
     
     def wakeTablePDIR(self):
         fw2 = np.reshape(self.fw2,(len(self.xw2),2))
@@ -305,13 +315,13 @@ class wake:
         thrustDeductionTable = ft1[:,0]* self.thrustDeduction
         for ix in range(len(self.xw1)):
             print (f"{self.xw1[ix]} {thrustDeductionTable[ix]}")
-            
+
     def wakeDeltaRAS(self):
         print ("WAKEF-DELTA-RAS")
         for ix in range(len(self.xw3)):
             print(f"{self.xw3[ix]} {self.fw3[ix]}")
 
-
+# %%
         
 
 
@@ -323,9 +333,19 @@ if __name__ == '__main__':
     aWake = wake(ship_nr,propellerDiameter)
     wake  = aWake.wakeCalculation()
     thrde = aWake.thrustDeduction()
-    #print (f" Wake for D ={propellerDiameter} = {wake}")
-    #aWake.wakeTable()
-    print(f" Thrust deduction for D = {propellerDiameter}  , {thrde}")
+    print (f" Wake for D ={propellerDiameter} = {wake}")
+    aWake.wakeTable()
+    #print(f" Thrust deduction for D = {propellerDiameter}  , {thrde}")
     #aWake.thrustDeductionTable()
-    aWake.wakeTablePDIR()
+    #aWake.wakeTablePDIR()
     pass
+# %%
+    xw1= aWake.xw1
+    fw1 = np.reshape(aWake.fw1,(19,4))
+    f = interp1d(xw1,fw1[:,0],kind='cubic')
+    spx = np.arange(-180,180,0.5)
+    splined=f(spx)
+    plt.plot(xw1,fw1[:,0],'-*',label='linear')
+    plt.plot(spx,splined,label='splined')
+    plt.legend()
+# %%
