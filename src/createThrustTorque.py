@@ -205,15 +205,15 @@ class ThrustTorque:
 
 if __name__ == '__main__':
 
-    AeA0 = 0.7 #0.98
+    AeA0 = 0.98
 
-    PD = 0.71505
+    PD = 0.71505  # 0.9040 
     ThrustData = True
 
     aThrustTorqueData = ThrustTorque()
-    #df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'FP')
+    df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'FP')
     #print(df)
-    df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'CP')
+    #df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'CP')
     df.head()
     pass
 

@@ -4,5 +4,11 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {    "python.unitTest.unittestArgs": [
+		"-p",
+        "*_test.py",
+        "-v",
+        "-s",
+        "./tests"
+    ],}
 }
