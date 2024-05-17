@@ -15,10 +15,19 @@ import KtKq
 
 # %%
 class KtKqMethods(unittest.TestCase):
+    KtKqObj = KtKq.KtKq(3949)
+    @classmethod
+    def setUpClass(cls):
+        cls._KtKqObj = KtKq.KtKq(3949)
+
+    @classmethod    
+    def tearDownClass(cls):
+        cls._connection.destroy()
 
     def test_openwaterprop(self):
 
-        KtKqObj = KtKq.KtKq(3949)
+        
+        print(self._KtKqObj)
 
         betas_arr=[ 
                     -10.0,
@@ -36,7 +45,7 @@ class KtKqMethods(unittest.TestCase):
         CtArr=[]
         CqArr=[]
         for BETASWAG in betas_arr:
-            FCTWAG, FCQWAG = KtKqObj.openwaterprop(BETASWAG)
+            FCTWAG, FCQWAG = self.KtKqObj.openwaterprop(BETASWAG)
             if BETASWAG >=0 and FCQWAG >= 0: # on in 1. Quadrant we use wageningen
                 CtArr.append((BETASWAG,FCTWAG))
                 CqArr.append((BETASWAG,FCQWAG))
@@ -53,6 +62,8 @@ class KtKqMethods(unittest.TestCase):
         
         print(f"FCTWAG: {FCTWAG}")
         print(f"FCQWAG: {FCQWAG}")
+
+
 
 
 # %%

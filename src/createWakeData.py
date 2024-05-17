@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
-import propellerThumbs as pThumbs
+import Thumbs as pThumbs
 
 '''
 c
@@ -31,7 +31,7 @@ c
 '''
 
 
-class wake(pThumbs.propellerThumbs):
+class wake(pThumbs.Thumbs):
            # Initialize xw1 with the given values
     xw1 = [-180, -165, -135, -90, -45, -20, 0, 
         10, 18.4, 45, 90, 110, 130, 140, 150, 160, 165, 170, 180]

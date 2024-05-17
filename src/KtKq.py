@@ -1,11 +1,11 @@
 import math
-import propellerThumbs as pThumbs
+import Thumbs as pThumbs
 
 import numpy as np
 import scipy.io
 
 
-class KtKq(pThumbs.propellerThumbs):
+class KtKq(pThumbs.Thumbs):
 
     def __init__(self,shipnr,propellerDiameter=None):
         super().__init__(shipnr,propellerDiameter=None)
@@ -86,6 +86,8 @@ class KtKq(pThumbs.propellerThumbs):
 
 
     def Ktkq(self,ajinp, X, Y, Z, Diam, N5, Tcs, Tc, Rnx, K1, K3, K1noz, V5, V6, Ic, Jc,L9,Txbase):
+
+        assert False, "Warning: 'old_method' is deprecated and just a copy from FORTAN t"
         """
         This function calculates Kt and Kq for given J.
         Uncorrected Kt and Kq are calculated by call of Ktkqx.

@@ -1,6 +1,6 @@
 
 
-class propellerThumbs:
+class Thumbs:
 
 
     def __init__(self,shipnr,propellerDiameter=None):
