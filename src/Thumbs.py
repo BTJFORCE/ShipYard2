@@ -1,4 +1,5 @@
 
+import numpy as np
 
 class Thumbs:
 
@@ -8,9 +9,12 @@ class Thumbs:
         self.read_SY1Data(shipnr)
         print('hardcoded some values here for now')
         self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
+        self.Lpp = 312 # From ShipData
         self.beam = 53.5  ## get from shipDataLib
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
         self.wettedSurface = 23243.8  ## get from shipDataLib
+        self.waterPlaneArea = 0.893628117 * self.Lpp * self.beam
+       
         self.PD = 0.71505  ## get from shipDataLib
         self.nrProp = self.ship_data['number_of_propellers']
         self.nrBlades = self.ship_data['number_of_blades']
@@ -26,6 +30,10 @@ class Thumbs:
         self.nozzle = 0
         self.meanDraft =(self.draftAft + self.draftFore)/2.0
         self.waterLineBlock = self.displacement /(self.lengthWaterLine*self.beam*self.meanDraft) # waterline block coefficient
+        self.blockCoefficient = 0.704661757
+        self.COG=np.array([-0.002290749, 0, -0.415058824]) * np.array([self.Lpp ,self.beam,self.meanDraft])
+        self.verticalCenterOfBoyancy = 0.453647058824 * self.meanDraft
+        self.gyration = np.array([0.4, 0.25, 0.25]) * np.array([self.beam,self.Lpp,self.Lpp])
     
        
         self.Formal = self.ship_data['Total_FormFactor'] ## 1.21268
@@ -36,6 +44,10 @@ class Thumbs:
         self.verticalCenterBulb = self.ship_data['verticalCenterBulb']## 5.0 #Vertical position of center of bulb from BL, m 
         self.LCB_ratio = self.ship_data['LCB_ratio'] ##0.00612186
         self.Fmxaft = self.ship_data['FormFactorStern']
+
+        self.GMT = self.ship_data['GMT']
+        self.GML = self.ship_data['GML']
+
 
         #self.areaRatio = aRatio
        # self.Displacement = 100000
