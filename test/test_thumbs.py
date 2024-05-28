@@ -26,10 +26,8 @@ class KtKqMethods(unittest.TestCase):
         pass
 
     def test_openwaterprop(self):
-
-        
+      
         print(self._KtKqObj)
-
         betas_arr=[ 
                     -10.0,
                     0.,
@@ -77,6 +75,15 @@ class TestHullThumbs(unittest.TestCase):
         # Initialize the HullThumbs object before each test method
         self.hull_thumbs = HullThumbs(shipnr=3949, propellerDiameter=5.0)
 
+    def tearDown(self):
+        # Clean up any resources after each test method
+        pass
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up any class-level fixtures, if necessary
+        pass
+    
     def test_linear_damping_initialization(self):
         # Test the linearDamping method
         self.hull_thumbs.linearDamping()
@@ -90,14 +97,10 @@ class TestHullThumbs(unittest.TestCase):
         
         # Repeat for PitchDamping, RollDamping, SurgeDamping, and SwayDamping
         # ...
-
-    def tearDown(self):
-        # Clean up any resources after each test method
-        pass
-
-    @classmethod
-    def tearDownClass(cls):
-        # Clean up any class-level fixtures, if necessary
+    def test_squat(self):
+        squaFP = self.hull_thumbs.getSquatAP()
+        print (f" SquatFP {squaFP}")
+        np.testing.assert_allclose(squaFP[0,1],-1.22197368e-02,rtol=0.1)
         pass
 
 # %%
@@ -105,3 +108,4 @@ class TestHullThumbs(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+# %%
