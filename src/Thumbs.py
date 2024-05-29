@@ -2,6 +2,12 @@
 import numpy as np
 
 class Thumbs:
+    '''
+    Base class holding ship particulars used in different thumps
+    some data are hard coded as SY2 should have these variables already
+    methods needed to set these values from SY2
+    a new extra data fuile introduced with data normaly inserted by user in SY1
+    '''
 
 
     def __init__(self,shipnr,propellerDiameter=None):
@@ -14,7 +20,7 @@ class Thumbs:
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
         self.wettedSurface = 23243.8  ## get from shipDataLib
         self.waterPlaneArea = 0.893628117 * self.Lpp * self.beam
-       
+        self.propellerType = 'FP'
         self.PD = 0.71505  ## get from shipDataLib
         self.nrProp = self.ship_data['number_of_propellers']
         self.nrBlades = self.ship_data['number_of_blades']
