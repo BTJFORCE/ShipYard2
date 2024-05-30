@@ -3,10 +3,12 @@ from sklearn.datasets import make_regression
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils import resample
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 import pandas as pd
-
+from sklearn.metrics import mean_squared_error
+from joblib import dump,load
 # Generate synthetic data
 X, y = make_regression(n_samples=100, n_features=20, n_targets=3, random_state=1)
 
@@ -74,7 +76,7 @@ y_ytrain=y_yCoefs.drop([4,42])
 
 y_ntest=y_nCoefs.loc[[4,42]]
 y_ntrain=y_nCoefs.drop([4,42])
-# %%
+
 ##########
 # Fit the model on the training data
 svm_regressor = SVR(kernel='linear')
@@ -87,6 +89,7 @@ multi_target_regressor = MultiOutputRegressor(ridge_regressor)
 multi_target_regressor.fit(X_train, y_xtrain)
 predictions = multi_target_regressor.predict(X_test)
 example = X_test.loc[4]
+
 predicted_targets = multi_target_regressor.predict([example])
 print(f"Predicted :      actual ")
 print(f'xv {predicted_targets[0][0]:.1f}        {y_xtest.iloc[0,0]}')
@@ -95,4 +98,40 @@ print(f'xrr {predicted_targets[0][2]:.1f}       {y_xtest.iloc[0,2]}')
 print(f'xvr {predicted_targets[0][3]:.1f}       {y_xtest.iloc[0,3]}')
 print(f'xudot {predicted_targets[0][4]:.1f}     {y_xtest.iloc[0,4]}')
 
+# %%
+# Number of bootstrap samples to create
+n_iterations = 1000
+# Size of each sample
+n_size = int(len(X_train_scaled) * 0.25)
+
+# Initialize variables to store the best model and its score
+
+
+for parameter in y_xtrain.columns:
+    best_model = None
+    best_score = float('inf')    
+    for i in range(n_iterations):
+        # Prepare train and test sets
+        X_sample, y_sample = resample(X_train_scaled, y_xtrain[parameter], n_samples=n_size)
+        model = ridge_regressor
+        model.fit(X_sample, y_sample)
+        # Evaluate the model
+        predictions = model.predict(X_train_scaled)
+        score = mean_squared_error(y_xtrain[parameter], predictions)
+        
+        # Check if the current model is better than the best model so far
+        if score < best_score:
+            print(f'parameter {parameter} iteration {i} score {score} ')
+            best_score = score
+            best_model = model
+
+    # Save the best model to a file
+    print (f"Saving best_model_{parameter}.joblib score {score:.1f}")
+    dump(best_model, f'best_model_{parameter}.joblib')
+# %%
+#test the models
+for parameter in y_xtest.columns:
+    model = load(f'best_model_{parameter}.joblib')
+    prediction = model.predict(X_test_scaled)
+    print(f"{parameter} predicted 4,42 {prediction[0]:.1f} {prediction[1]:.1f} expected {y_xtest[parameter].loc[4]} {y_xtest[parameter].loc[42]}")
 # %%
