@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 from joblib import dump,load
+from sklearn.ensemble import RandomForestRegressor
 # Generate synthetic data
 X, y = make_regression(n_samples=100, n_features=20, n_targets=3, random_state=1)
 
@@ -79,7 +80,7 @@ y_ntrain=y_nCoefs.drop([4,42])
 
 ##########
 # Fit the model on the training data
-svm_regressor = SVR(kernel='linear')
+svm_regressor = SVR(kernel="rbf", gamma=0.1)
 # Initialize the Ridge regressor
 ridge_regressor = Ridge(alpha=1.0)
 
@@ -100,9 +101,10 @@ print(f'xudot {predicted_targets[0][4]:.1f}     {y_xtest.iloc[0,4]}')
 
 # %%
 # Number of bootstrap samples to create
+randomForest_regressor = RandomForestRegressor(n_estimators=100, random_state=42)
 n_iterations = 1000
 # Size of each sample
-n_size = int(len(X_train_scaled) * 0.25)
+n_size = int(len(X_train_scaled) * 0.5)
 
 # Initialize variables to store the best model and its score
 
@@ -113,7 +115,7 @@ for parameter in y_xtrain.columns:
     for i in range(n_iterations):
         # Prepare train and test sets
         X_sample, y_sample = resample(X_train_scaled, y_xtrain[parameter], n_samples=n_size)
-        model = ridge_regressor
+        model = ridge_regressor # ridge_regressor
         model.fit(X_sample, y_sample)
         # Evaluate the model
         predictions = model.predict(X_train_scaled)

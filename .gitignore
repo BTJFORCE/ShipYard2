@@ -143,3 +143,6 @@ cython_debug/
 # Project specific
 SY2/
 
+src/__pycache__/Thumbs.cpython-39.pyc
+src/*.joblib
+
