@@ -5,6 +5,7 @@ import numpy as np
 import math
 import sys
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 import os
 import plotly.graph_objects as go
 
@@ -103,6 +104,11 @@ class TestHullThumbs(unittest.TestCase):
         print (f" SquatFP {squaFP}")
         np.testing.assert_allclose(squaFP[0,1],-1.22197368e-02,rtol=0.1)
         pass
+    def test_addedMassTOH(self):
+        XDCOR = self.hull_thumbs.addedMassTOH('XDCOR')
+        print('***** ADDED MASS XDCOR(TOH)')
+        print (f"{XDCOR}")
+        np.testing.assert_allclose(XDCOR[4,1],2.024,rtol=0.1)
 
 
 class TestPropellerSteering(unittest.TestCase):
@@ -141,4 +147,89 @@ class TestPropellerSteering(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+# %%
+print("just a place for using ipython")
+xvals=[-13.38,
+-13.12,
+-12.86,
+-12.6,
+-12.35,
+-11.83,
+-11.06,
+-10.29,
+-9.26,
+-8.23,
+-7.2,
+-6.17,
+-5.14,
+-4.12,
+-3.09,
+-2.06,
+-1,
+0,
+.99,
+1,
+2.06,
+3.09,
+4.12,
+5.14,
+6.17,
+7.2,
+8.23,
+9.26,
+10.29,
+11.06,
+11.83,
+12.35,
+12.6,
+12.86,
+13.12,
+13.38
+]
+yvals=[0.40659,
+0.3911,
+0.37591,
+0.36103,
+0.34644,
+0.31817,
+0.27802,
+0.24058,
+0.19487,
+0.15397,
+0.11883,
+0.09378,
+0.07342,
+0.06018,
+0.05075,
+0.04235,
+0.00587379,
+0,
+0,
+-0.00587379,
+-1.21E-02,
+-1.90E-02,
+-2.80E-02,
+-4.52E-02,
+-6.76E-02,
+-0.09506,
+-0.12318,
+-0.1559,
+-0.19247,
+-0.22242,
+-0.25454,
+-0.27715,
+-0.28882,
+-0.30073,
+-0.31288,
+-0.32527
+]
+f = interp1d(xvals,yvals)
+
+y1 = f(1)
+plt.plot(1,y1,'*',color='r')
+plt.plot(xvals,yvals,'-*')
+plt.grid()
+
+# %%
+y1
 # %%

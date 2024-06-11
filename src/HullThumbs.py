@@ -431,6 +431,26 @@ class HullThumbs(Thumbs.Thumbs):
 
       return self.SquatAP
 
+    def addedMassTOH(self,tableName):
+      
+      if tableName in ['XDCOR','XHCOR','NDCOR','NHCOR']:
+        acoef = 2.0
+        bcoef = 3.0
+      else:
+        acoef = 4.0
+        bcoef = 3.0
+      
+        
+      
+      xvals=np.arange(0,1.1,0.2)
+      yvals =np.zeros(len(xvals))
+      for ix in range(len(xvals)):
+        yvals[ix]= 1 + acoef*xvals[ix]**bcoef
+      res = np.array(list(zip(xvals,yvals)))
+      return res
+      
+      
+      
     
 
 
