@@ -10,36 +10,33 @@ class Thumbs:
     '''
 
 
-    def __init__(self,shipnr,propellerDiameter=None):
+    def __init__(self,shipDatadict):
  
-        self.read_SY1Data(shipnr)
+        self.read_SY1Data(shipDatadict['shipnr'])
         print('hardcoded some values here for now')
         self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
-        self.Lpp = 312 # From ShipData
-        self.beam = 53.5  ## get from shipDataLib
+        self.Lpp = shipDatadict['Lpp'] ##312 # From ShipData
+        self.beam = shipDatadict['Beam'] ##53.5  ## get from shipDataLib
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
-        self.wettedSurface = 23243.8  ## get from shipDataLib
-        self.waterPlaneArea = 0.893628117 * self.Lpp * self.beam
-        self.propellerType = 'FP'
-        self.PD = 0.71505  ## get from shipDataLib
+        self.wettedSurface = shipDatadict['wettedSurface'] ##23243.8  ## get from shipDataLib
+        self.waterPlaneArea = shipDatadict['waterPlaneArea'] ##0.893628117 * self.Lpp * self.beam
+        self.propellerType = shipDatadict['propellerType'] #'FP'
+        self.PD = shipDatadict['PropellerPitch'] ## 0.71505  ## get from shipDataLib
         self.nrProp = self.ship_data['number_of_propellers']
         self.nrBlades = self.ship_data['number_of_blades']
-        self.displacement = 218220.0 ## get from shipDataLib
+        self.displacement = shipDatadict['displacement'] ##218220.0 ## get from shipDataLib
         self.serviceSpeed = self.ship_data['service_speed']
         self.propeller_revs_serviceSpeed = self.ship_data['propeller_revs_serviceSpeed']
-        if propellerDiameter:
-            self.propellerDiameter = propellerDiameter ## get from shipDataLib
-        else:
-            self.propellerDiameter = 7 ## get from shipData
-        self.draftAft = 17. ## get from shipData
-        self.draftFore = 17. ## get from shipData
+        self.propellerDiameter = shipDatadict['propellerDiameter'] #7 ## get from shipData
+        self.draftAft = shipDatadict['draftAft'] #17. ## get from shipData
+        self.draftFore = shipDatadict['draftFore'] #17. ## get from shipData
         self.nozzle = 0
         self.meanDraft =(self.draftAft + self.draftFore)/2.0
         self.waterLineBlock = self.displacement /(self.lengthWaterLine*self.beam*self.meanDraft) # waterline block coefficient
-        self.blockCoefficient = 0.704661757
-        self.COG=np.array([-0.002290749, 0, -0.415058824]) * np.array([self.Lpp ,self.beam,self.meanDraft])
-        self.verticalCenterOfBoyancy = 0.453647058824 * self.meanDraft
-        self.gyration = np.array([0.4, 0.25, 0.25]) * np.array([self.beam,self.Lpp,self.Lpp])
+        self.blockCoefficient = shipDatadict['blockCoefficient'] #0.704661757
+        self.COG=shipDatadict['CenterofGravity'] #np.array([-0.002290749, 0, -0.415058824]) * np.array([self.Lpp ,self.beam,self.meanDraft])
+        self.verticalCenterOfBoyancy = shipDatadict['verticalCenterOfBoyancy'] #'0.453647058824 * self.meanDraft
+        self.gyration = shipDatadict['GyrationArms'] ##np.array([0.4, 0.25, 0.25]) * np.array([self.beam,self.Lpp,self.Lpp])
     
        
         self.Formal = self.ship_data['Total_FormFactor'] ## 1.21268

@@ -14,10 +14,10 @@ class HullThumbs(Thumbs.Thumbs):
     
 
 
-    def __init__(self,shipnr,propellerDiameter=None):
+    def __init__(self,shipDataDict):
 
 
-      super().__init__(shipnr,propellerDiameter=None)
+      super().__init__(shipDataDict)
 
 
 #
@@ -432,6 +432,12 @@ class HullThumbs(Thumbs.Thumbs):
       return self.SquatAP
 
     def addedMassTOH(self,tableName):
+      '''
+      This method returns the added mass TOH correction curves 
+      according to Leif Wagner Smidth (LWS)
+      original fortran code from ShipYard1 
+      admtoh.f (added mass toh)
+      '''
       
       if tableName in ['XDCOR','XHCOR','NDCOR','NHCOR']:
         acoef = 2.0

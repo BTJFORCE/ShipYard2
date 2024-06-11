@@ -17,11 +17,33 @@ from HullThumbs import HullThumbs
 from propellerSteering import propellerStering
 
 # %%
+
+shipDatadict={}
+shipDatadict['shipnr'] = 3949
+shipDatadict['Lpp'] = 312
+shipDatadict['Beam'] = 53.5
+shipDatadict['wettedSurface'] = 23243.8
+shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['Lpp'] * shipDatadict['Beam']
+shipDatadict['propellerType'] ='FP'
+shipDatadict['PropellerPitch'] = 0.71505
+shipDatadict['displacement'] =218220.0
+shipDatadict['propellerDiameter'] = 7.0
+shipDatadict['draftAft']  = 17.
+shipDatadict['draftFore'] = 17.0
+shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
+shipDatadict['blockCoefficient'] = 0.704661757
+shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
+shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
+shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['Lpp'],shipDatadict['Lpp']])
+
 class KtKqMethods(unittest.TestCase):
-    KtKqObj = KtKq.KtKq(3949)
     @classmethod
     def setUpClass(cls):
-        cls._KtKqObj = KtKq.KtKq(3949)
+        # Set up any class-level fixtures, if necessary
+        pass
+    
+    def setUp(self):
+        self._KtKqObj = KtKq.KtKq(shipDatadict)
 
     @classmethod    
     def tearDownClass(cls):
@@ -46,7 +68,7 @@ class KtKqMethods(unittest.TestCase):
         CtArr=[]
         CqArr=[]
         for BETASWAG in betas_arr:
-            FCTWAG, FCQWAG = self.KtKqObj.openwaterprop(BETASWAG)
+            FCTWAG, FCQWAG = self._KtKqObj.openwaterprop(BETASWAG)
             if BETASWAG >=0 and FCQWAG >= 0: # on in 1. Quadrant we use wageningen
                 CtArr.append((BETASWAG,FCTWAG))
                 CqArr.append((BETASWAG,FCQWAG))
@@ -75,7 +97,10 @@ class TestHullThumbs(unittest.TestCase):
 
     def setUp(self):
         # Initialize the HullThumbs object before each test method
-        self.hull_thumbs = HullThumbs(shipnr=3949, propellerDiameter=5.0)
+
+        
+        
+        self.hull_thumbs = HullThumbs(shipDatadict)
 
     def tearDown(self):
         # Clean up any resources after each test method
@@ -127,7 +152,7 @@ class TestPropellerSteering(unittest.TestCase):
         
     def test_propellerSteering(self):
         
-        self.propellerSteer = propellerStering(shipnr=3949, CTdata = self.CTdata)
+        self.propellerSteer = propellerStering(shipDatadict, CTdata = self.CTdata)
         FY = self.propellerSteer.propellerSteeringForce(1)
         np.testing.assert_allclose(FY[0,0],0.025,rtol=0.01)
         print ('NOTE *** Propeller steering calculation only testet for FP prop')

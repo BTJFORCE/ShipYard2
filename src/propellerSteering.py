@@ -8,8 +8,8 @@ import scipy.io
 
 class propellerStering(pThumbs.Thumbs):
     
-    def __init__(self,shipnr,CTdata,propellerDiameter=None):
-        super().__init__(shipnr,propellerDiameter=None)    
+    def __init__(self,shipDataDict,CTdata):
+        super().__init__(shipDataDict)    
         
         self.CTdata = CTdata
         self.numBETAs = len(CTdata)

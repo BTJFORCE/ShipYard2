@@ -7,8 +7,8 @@ import scipy.io
 
 class KtKq(pThumbs.Thumbs):
 
-    def __init__(self,shipnr,propellerDiameter=None):
-        super().__init__(shipnr,propellerDiameter=None)
+    def __init__(self,shipDataDict):
+        super().__init__(shipDataDict)
 
 
 
