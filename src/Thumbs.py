@@ -15,11 +15,12 @@ class Thumbs:
         self.read_SY1Data(shipDatadict['shipnr'])
         print('hardcoded some values here for now')
         self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
-        self.Lpp = shipDatadict['Lpp'] ##312 # From ShipData
+        self.Lpp = shipDatadict['lpp'] ##312 # From ShipData
         self.beam = shipDatadict['Beam'] ##53.5  ## get from shipDataLib
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
         self.wettedSurface = shipDatadict['wettedSurface'] ##23243.8  ## get from shipDataLib
         self.waterPlaneArea = shipDatadict['waterPlaneArea'] ##0.893628117 * self.Lpp * self.beam
+        self.underWaterLateralArea = shipDatadict['underWaterLateralArea']
         self.propellerType = shipDatadict['propellerType'] #'FP'
         self.PD = shipDatadict['PropellerPitch'] ## 0.71505  ## get from shipDataLib
         self.nrProp = self.ship_data['number_of_propellers']
@@ -50,6 +51,7 @@ class Thumbs:
 
         self.GMT = self.ship_data['GMT']
         self.GML = self.ship_data['GML']
+        self.rho = 1025.0
 
 
         #self.areaRatio = aRatio

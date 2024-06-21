@@ -31,6 +31,7 @@ shipDatadict['propellerDiameter'] = 7.0
 shipDatadict['draftAft']  = 17.
 shipDatadict['draftFore'] = 17.0
 shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
+shipDatadict['underWaterLateralArea'] = 312*17*.9123
 shipDatadict['blockCoefficient'] = 0.704661757
 shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
 shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
@@ -138,6 +139,13 @@ class TestHullThumbs(unittest.TestCase):
         a,b = self.hull_thumbs.dmimix()
         np.testing.assert_allclose(a['XUDOT'],6.014,rtol=0.1)
         #print(a)
+        pass
+    def test_defval(self):
+        motion = 1
+        icoty = 0 # Base model Beta
+        absc1,absc2 = self.hull_thumbs.defval(1,0)
+        assert absc2 is None, "absc2 should be none"
+        assert len(absc1)==31,"absc1 should have length 31"
         pass
     
 
