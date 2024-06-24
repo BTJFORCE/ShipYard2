@@ -153,10 +153,11 @@ class HullThumbs(Thumbs.Thumbs):
       X_HL_multiPliers = self.DriftMultiPliers['X_HL']
       X_HL_Drift =[]
       for betad in absc1:
+        dummy = betad
         betad = np.radians(betad)
         gamma = 0
         pmmtyp = 1
-        SepPoint = np.radians(45.5)
+        SepPoint = 45.0
         coftyp,ucar = self.pmmmsm(uoo,betad,gamma,pmmtyp,SepPoint)
         ucar = self.pmmcar(uoo,betad,coftyp)
         gamma = delta = heel = epsil = 0.0  
@@ -176,13 +177,41 @@ class HullThumbs(Thumbs.Thumbs):
           for key in X_HL_multiPliers.keys():
             factor *= X_HL_multiPliers[key]
           val = fdimu2[0]*utot2/factor  
-          X_HL_Drift.append(val)
+         
+          if np.isclose(np.abs(dummy),90.0) :
+            print(" NOT SURE HOW SY1 ensure DRIFT X_HL(BETA = 90) to be zero here we set it !! ")
+            X_HL_Drift.append(0.0)
+          else:
+            if np.abs(dummy) >= 170:
+              print(" Dirty hardcoding as I c'ant figure out where the sign change in SY1")
+              val *= -1
+              
+            X_HL_Drift.append(val)
         else:
           print ('Correction tables not implemented yet !!!')
+
     
-          pass  
+    
     d = {'BETAD': absc1, 'X_HL': np.array(X_HL_Drift)}
     df = pd.DataFrame(data=d)
+    df.set_index('BETAD',inplace=True)
+# These comments and the following code transfered and translated from fortran code    
+#cbla    the next if block are made to make the X_HL for drift look right,
+#cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
+#cbla    to get the value at 45 degree and make the table symmetrical. 
+#cbla    The 1.5 factor is taken from ship3005. 
+       
+    #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
+    #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
+    #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
+    #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
+    df.loc[-135.0]  = -1.5* df.loc[-20.0]
+    df.loc[-70.0]   = df.loc[-20.0]
+    df.loc[-45.0]   = 1.5* df.loc[-20.0]
+    df.loc[ 45.0]   = 1.5* df.loc[-20.0]
+    df.loc[ 70.0]   = df.loc[-20.0]
+    df.loc[ 135.0]  = -1.5* df.loc[-20.0]
+
     return df,X_HL_multiPliers.keys()
   
 
@@ -691,7 +720,6 @@ class HullThumbs(Thumbs.Thumbs):
     coftyp  : coefficient type 1 -> pmm  else msm
     
     '''
-    assert(betad >3.15, "pmmcar called with degrees ?")
     if coftyp == 1 :
       ucar = uo/np.cos(betad)
     else:
@@ -739,10 +767,14 @@ class HullThumbs(Thumbs.Thumbs):
     ndef1 = None
     ndef2 = None
     if motion == 1 and icoty == 0: 
-      absc1=[-180.0,-177.0,-175.0,-170.0,-95.0,-90.0,
-              -85.0,-22.0,-20.0,-18.0,-15.0,-10.0,-5.0,-2.0,-1.0,
-                0.0,1.0,2.0,5.0,10.0,15.0,18.0,20.0,22.0,85.0,90.0,
-                95.0,170.0,175.0,177.0,180.0]
+      ###
+      # pmms change -95,95 to -135,135 here BTJ changed this in the defval
+      #             -85,85 to   -70,70
+      ###
+      absc1=[-180.0,-177.0,-175.0,-170.0,-135.0,-90.0,
+              -70.0,-45.0,-20.0,-18.0,-15.0,-10.0,-5.0,-2.0,-1.0,
+                0.0,1.0,2.0,5.0,10.0,15.0,18.0,20.0,45.0,70.0,90.0,
+                135.0,170.0,175.0,177.0,180.0]
       ndef1 = len(absc1)
       idof  =  0    
 #       betad and toh
@@ -879,7 +911,7 @@ class HullThumbs(Thumbs.Thumbs):
       Q  = qdim
       P   = pdim/(utot/lpp)
       D   = ddim
-      USIGN = 1.0
+      usign = 1.0
     else:
         utot2 = 1.
         utot  = 1.0
@@ -942,8 +974,14 @@ class HullThumbs(Thumbs.Thumbs):
           if 'DOT' in val:
             continue  # in the fortran PMMFOR not DOT derivatives appears
           ncoeff=np.append(ncoeff,pmmCoefs[val])
-          speedvector=np.append(speedvector,self.speedfactor(val,U,V,R)) 
-          TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))        
+          speedfactor = self.speedfactor(val,U,V,R)
+          speedvector=np.append(speedvector,speedfactor) 
+          # comment from fortran code
+          #It is believed that N must change its sign for ship going astern
+          #Therefore, USIGN is multiplied to the NvIvI
+          if 'VIVI' in val:
+            speedfactor *= usign
+          TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b)*speedfactor)        
       
       fdimu2[2]= np.sum(ncoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**3
       fdim[2] = fdimu2[2]*utot2      
@@ -953,6 +991,7 @@ class HullThumbs(Thumbs.Thumbs):
         
 # %%
 import matplotlib.pyplot as plt
+import numpy as np
 if __name__ == '__main__':
   
   shipDatadict={}
@@ -977,13 +1016,13 @@ if __name__ == '__main__':
   hull_Thumbs = HullThumbs(shipDatadict)
   # !!! dmimix takes a bit of time !!!
   #a,b =hull_Thumbs.dmimix()  
-  with open('data\PMMdata\PMMCoefs3686.dat','r') as f:
+  with open(r'data\PMMdata\3949NeuPMMDe_005_001.txt','r') as f:
     pmmCoefs = {}
     for line in f:
       splt = line.split()
       pmmCoefs[splt[0]] = float(splt[1])/1.0E5
-  baseTable,multiPliers = hull_Thumbs.getBaseTable(pmmCoefs,'DRIFT','X_HL')
-  plt.plot(baseTable['BETAD'],baseTable['X_HL'],label='X_HL(BETAD)')
+  baseTable,multiPliers = hull_Thumbs.getBaseTable(pmmCoefs,'DRIFT')
+  plt.plot(baseTable,label='X_HL(BETAD)')
   plt.legend()
   plt.grid()
   plt.show()
@@ -1003,5 +1042,11 @@ if __name__ == '__main__':
 
 
 # %%
-
+dfSY1 = pd.read_csv(r'H:\GitRepos\ShipYard2\data\PMMdata\SY1hull3949XHL_DriftBetaD.dat',header=None,sep='\s+')
+# %%
+plt.plot(baseTable,'-*',label='SY2:X_HL(BETAD)')
+plt.plot(dfSY1[0],dfSY1[1],'-*',label='SY1')
+plt.legend()
+plt.grid()
+plt.show()
 # %%
