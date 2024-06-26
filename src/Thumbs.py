@@ -38,7 +38,7 @@ class Thumbs:
         self.COG=shipDatadict['CenterofGravity'] #np.array([-0.002290749, 0, -0.415058824]) * np.array([self.Lpp ,self.beam,self.meanDraft])
         self.verticalCenterOfBoyancy = shipDatadict['verticalCenterOfBoyancy'] #'0.453647058824 * self.meanDraft
         self.gyration = shipDatadict['GyrationArms'] ##np.array([0.4, 0.25, 0.25]) * np.array([self.beam,self.Lpp,self.Lpp])
-    
+        self.SeparationPoint = shipDatadict['SeparationPoint']
        
         self.Formal = self.ship_data['Total_FormFactor'] ## 1.21268
         self.viscocity = self.ship_data['viscocity'] ##1.34066

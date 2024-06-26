@@ -127,7 +127,18 @@ class HullThumbs(Thumbs.Thumbs):
     ddim  = delta
 
     return udim,vdim,rdim,qdim,pdim,ddim
-      
+
+  def updateMultiplierWithActualSpeed(self,multiPlierDict,speed_dict):
+    for key in multiPlierDict.keys():  
+      if key in speed_dict.keys():
+        multiPlierDict[key] = speed_dict[key]
+    return multiPlierDict
+    
+  def getForceCoefficient(self,multiPlier,force,utot2):
+    factor = 1.0
+    for key in multiPlier.keys():
+      factor *= multiPlier[key]
+    return force*utot2/factor      
   
   
   def pmms(self,pmmcoefs,motion,icoty,uoo,ipmms):
@@ -154,15 +165,21 @@ class HullThumbs(Thumbs.Thumbs):
     
     if motion == 1: # Drift
       X_HL_multiPliers = self.DriftMultiPliers['X_HL']
-      X_HL_Drift =[]
+      Y_HL_multiPliers = self.DriftMultiPliers['Y_HL']
+      N_HL_multiPliers = self.DriftMultiPliers['N_HL']
+      X_HL_Drift ={}
+      Y_HL_Drift ={}
+      N_HL_Drift ={}
       if absc2 != None:
-        correctionTable = np.zeros((len(absc1),len(absc2)))
+        correctionTableX_HL = np.zeros((len(absc1),len(absc2)))
+        correctionTableY_HL = np.zeros((len(absc1),len(absc2)))
+        correctionTableN_HL = np.zeros((len(absc1),len(absc2)))
       for ixbeta,betad in enumerate(absc1):
         dummy = betad
         betad = np.radians(betad)
         gamma = 0
         pmmtyp = 1
-        SepPoint = 45.0
+        SepPoint = self.SeparationPoint
         coftyp,ucar = self.pmmmsm(uoo,betad,gamma,pmmtyp,SepPoint)
         ucar = self.pmmcar(uoo,betad,coftyp)
         gamma = delta = heel = epsil = 0.0  
@@ -171,43 +188,53 @@ class HullThumbs(Thumbs.Thumbs):
         udim,vdim,rdim,qdim,pdim,ddim = self.pmmmot(ucar,betad,gamma,delta,heel,epsil)
         speed_dict = self.hluref(udim,vdim,rdim,pdim)
         # update the multipliers with speed values if they are available
-        for key in X_HL_multiPliers.keys():  
-          if key in speed_dict.keys():
-            X_HL_multiPliers[key] = speed_dict[key]
+        X_HL_multiPliers = self.updateMultiplierWithActualSpeed(X_HL_multiPliers,speed_dict)
+        Y_HL_multiPliers = self.updateMultiplierWithActualSpeed(Y_HL_multiPliers,speed_dict)        
+        N_HL_multiPliers = self.updateMultiplierWithActualSpeed(N_HL_multiPliers,speed_dict)
+
         toh=0
         uo = self.serviceSpeed
         fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
-        factor = 1
+        xfactor = 1
         if icoty == 0: #Base table
-          for key in X_HL_multiPliers.keys():
-            factor *= X_HL_multiPliers[key]
-          val = fdimu2[0]*utot2/factor  
-         
+          X_HL = self.getForceCoefficient(X_HL_multiPliers,fdimu2[0],utot2)
+          Y_HL = self.getForceCoefficient(Y_HL_multiPliers,fdimu2[1],utot2)
+          N_HL = self.getForceCoefficient(N_HL_multiPliers,fdimu2[2],utot2)
+    
+          X_HL_Drift[dummy] = X_HL
           if np.isclose(np.abs(dummy),90.0) :
-            print(" NOT SURE HOW SY1 ensure DRIFT X_HL(BETA = 90) to be zero here we set it !! ")
-            X_HL_Drift.append(0.0)
-          else:
-            if np.abs(dummy) >= 170:
+            X_HL_Drift[dummy] = 0.0
+          if np.abs(dummy) >= 170:
               print(" Dirty hardcoding as I c'ant figure out where the sign change in SY1")
-              val *= -1
-              
-            X_HL_Drift.append(val)
+              X_HL_Drift[dummy] *= -1
+          
+          Y_HL_Drift[dummy] = Y_HL
+          N_HL_Drift[dummy] = N_HL
+            
         else: ## now we create a correction table
           FBASE = fdimu2
           for ix,toh in enumerate(absc2):
             if ix == 0:
-              correctionTable[ixbeta,ix] = 1.0
+              correctionTableX_HL[ixbeta,ix] = 1.0
+              correctionTableY_HL[ixbeta,ix] = 1.0
+              correctionTableN_HL[ixbeta,ix] = 1.0
               continue
             fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
-            correctionTable[ixbeta,ix] = fdimu2[0]/FBASE[0]
+            correctionTableX_HL[ixbeta,ix] = fdimu2[0]/FBASE[0]
+            correctionTableY_HL[ixbeta,ix] = fdimu2[1]/FBASE[1]
+            correctionTableN_HL[ixbeta,ix] = fdimu2[2]/FBASE[2]
+            
           pass
             
 
     
     if icoty == 0:
-      d = {'BETAD': absc1, 'X_HL': np.array(X_HL_Drift)}
-      df = pd.DataFrame(data=d)
-      df.set_index('BETAD',inplace=True)
+      driftTables = {}
+   
+      dfx = pd.DataFrame(index=X_HL_Drift.keys(),data=X_HL_Drift.values())
+      dfx.index.name = 'BETAD'
+      dfx = dfx.rename(columns={0:'X_HL'})
+     
   # These comments and the following code transfered and translated from fortran code    
   #cbla    the next if block are made to make the X_HL for drift look right,
   #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
@@ -218,16 +245,35 @@ class HullThumbs(Thumbs.Thumbs):
       #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
       #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
       #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
-      df.loc[-135.0]  = -1.5* df.loc[-20.0]
-      df.loc[-70.0]   = df.loc[-20.0]
-      df.loc[-45.0]   = 1.5* df.loc[-20.0]
-      df.loc[ 45.0]   = 1.5* df.loc[-20.0]
-      df.loc[ 70.0]   = df.loc[-20.0]
-      df.loc[ 135.0]  = -1.5* df.loc[-20.0]
+      dfx.loc[-135.0]  = -1.5* dfx.loc[-20.0]
+      dfx.loc[-70.0]   = dfx.loc[-20.0]
+      dfx.loc[-45.0]   = 1.5* dfx.loc[-20.0]
+      dfx.loc[ 45.0]   = 1.5* dfx.loc[-20.0]
+      dfx.loc[ 70.0]   = dfx.loc[-20.0]
+      dfx.loc[ 135.0]  = -1.5* dfx.loc[-20.0]
+      
+      dfy = pd.DataFrame(index=Y_HL_Drift.keys(),data=Y_HL_Drift.values())
+      dfy.index.name = 'BETAD'
+      dfy = dfy.rename(columns={0:'Y_HL'})
+  
+      dfn = pd.DataFrame(index=Y_HL_Drift.keys(),data=N_HL_Drift.values())
+      dfn.index.name = 'BETAD'
+      dfn = dfn.rename(columns={0:'N_HL'})    
+
+      
+      driftTables['X_HL = DRIFT'] = dfx
+      driftTables['Y_HL = DRIFT'] = dfy
+      driftTables['N_HL = DRIFT'] = dfn
+      
     else:
-      df = pd.DataFrame(correctionTable,index=absc1,columns=absc2)
-      X_HL_multiPliers ={}
-    return df,X_HL_multiPliers.keys()
+      driftTables = {}
+      dfx = pd.DataFrame(correctionTableX_HL,index=absc1,columns=absc2)
+      dfy = pd.DataFrame(correctionTableY_HL,index=absc1,columns=absc2)
+      dfn = pd.DataFrame(correctionTableN_HL,index=absc1,columns=absc2)
+      driftTables['X_HL(BETAD,TOH)']=dfx
+      driftTables['Y_HL(BETAD,TOH)']=dfy
+      driftTables['N_HL(BETAD,TOH)']=dfy
+    return driftTables
   
 
   def getForceTables(self,pmmcoefs,tableName):
@@ -242,10 +288,10 @@ class HullThumbs(Thumbs.Thumbs):
       icoty = 0
       ipmms = 1
       uo = self.serviceSpeed
-      baseTable,multiPliers = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
+      baseTables = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
       #Get correction table
-      correctionTable,_ = self.pmms(pmmcoefs,motion,1,uo,ipmms)
-    return baseTable,multiPliers,correctionTable
+      correctionTables = self.pmms(pmmcoefs,motion,1,uo,ipmms)
+    return baseTables,correctionTables
     
 
   def linearDamping(self):
@@ -979,6 +1025,12 @@ class HullThumbs(Thumbs.Thumbs):
             continue  # in the fortran PMMFOR no DOT derivatives appears
           ycoeff=np.append(ycoeff,pmmCoefs[val])
           speedvector=np.append(speedvector,self.speedfactor(val,U,V,R)) 
+          if val in acoef.keys():
+            a = acoef[val]
+            b = bcoef[val]
+          else:
+            a = 0
+            b = 1
           TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))       
       
       fdimu2[1]= np.sum(ycoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
@@ -999,6 +1051,12 @@ class HullThumbs(Thumbs.Thumbs):
           #Therefore, USIGN is multiplied to the NvIvI
           if 'VIVI' in val:
             speedfactor *= usign
+          if val in acoef.keys():
+            a = acoef[val]
+            b = bcoef[val]
+          else:
+            a = 0
+            b = 1            
           TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b)*speedfactor)        
       
       fdimu2[2]= np.sum(ncoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**3
@@ -1030,7 +1088,7 @@ if __name__ == '__main__':
   shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
   shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
   shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['lpp'],shipDatadict['lpp']])
-
+  shipDatadict['SeparationPoint'] = 45.0
   hull_Thumbs = HullThumbs(shipDatadict)
   # !!! dmimix takes a bit of time !!!
   #a,b =hull_Thumbs.dmimix()  
@@ -1039,8 +1097,8 @@ if __name__ == '__main__':
     for line in f:
       splt = line.split()
       pmmCoefs[splt[0]] = float(splt[1])/1.0E5
-  baseTable,multiPliers,correctionTable = hull_Thumbs.getForceTables(pmmCoefs,'DRIFT')
-  plt.plot(baseTable,label='X_HL(BETAD)')
+  baseTables,correctionTables = hull_Thumbs.getForceTables(pmmCoefs,'DRIFT')
+  plt.plot(baseTables['X_HL = DRIFT'],label='X_HL(BETAD)')
   plt.legend()
   plt.grid()
   plt.show()
