@@ -147,12 +147,17 @@ class HullThumbs(Thumbs.Thumbs):
     c         8    |    epsi           |    ----
     c       -------|-------------------|--------------------
     '''
+
+   
     absc1 , absc2 = self.defval(motion,icoty)
+   
     
     if motion == 1: # Drift
       X_HL_multiPliers = self.DriftMultiPliers['X_HL']
       X_HL_Drift =[]
-      for betad in absc1:
+      if absc2 != None:
+        correctionTable = np.zeros((len(absc1),len(absc2)))
+      for ixbeta,betad in enumerate(absc1):
         dummy = betad
         betad = np.radians(betad)
         gamma = 0
@@ -187,47 +192,60 @@ class HullThumbs(Thumbs.Thumbs):
               val *= -1
               
             X_HL_Drift.append(val)
-        else:
-          print ('Correction tables not implemented yet !!!')
+        else: ## now we create a correction table
+          FBASE = fdimu2
+          for ix,toh in enumerate(absc2):
+            if ix == 0:
+              correctionTable[ixbeta,ix] = 1.0
+              continue
+            fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
+            correctionTable[ixbeta,ix] = fdimu2[0]/FBASE[0]
+          pass
+            
 
     
-    
-    d = {'BETAD': absc1, 'X_HL': np.array(X_HL_Drift)}
-    df = pd.DataFrame(data=d)
-    df.set_index('BETAD',inplace=True)
-# These comments and the following code transfered and translated from fortran code    
-#cbla    the next if block are made to make the X_HL for drift look right,
-#cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
-#cbla    to get the value at 45 degree and make the table symmetrical. 
-#cbla    The 1.5 factor is taken from ship3005. 
-       
-    #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
-    #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
-    #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
-    #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
-    df.loc[-135.0]  = -1.5* df.loc[-20.0]
-    df.loc[-70.0]   = df.loc[-20.0]
-    df.loc[-45.0]   = 1.5* df.loc[-20.0]
-    df.loc[ 45.0]   = 1.5* df.loc[-20.0]
-    df.loc[ 70.0]   = df.loc[-20.0]
-    df.loc[ 135.0]  = -1.5* df.loc[-20.0]
-
+    if icoty == 0:
+      d = {'BETAD': absc1, 'X_HL': np.array(X_HL_Drift)}
+      df = pd.DataFrame(data=d)
+      df.set_index('BETAD',inplace=True)
+  # These comments and the following code transfered and translated from fortran code    
+  #cbla    the next if block are made to make the X_HL for drift look right,
+  #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
+  #cbla    to get the value at 45 degree and make the table symmetrical. 
+  #cbla    The 1.5 factor is taken from ship3005. 
+        
+      #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
+      #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
+      #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
+      #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
+      df.loc[-135.0]  = -1.5* df.loc[-20.0]
+      df.loc[-70.0]   = df.loc[-20.0]
+      df.loc[-45.0]   = 1.5* df.loc[-20.0]
+      df.loc[ 45.0]   = 1.5* df.loc[-20.0]
+      df.loc[ 70.0]   = df.loc[-20.0]
+      df.loc[ 135.0]  = -1.5* df.loc[-20.0]
+    else:
+      df = pd.DataFrame(correctionTable,index=absc1,columns=absc2)
+      X_HL_multiPliers ={}
     return df,X_HL_multiPliers.keys()
   
 
-  def getBaseTable(self,pmmcoefs,tableName):
+  def getForceTables(self,pmmcoefs,tableName):
     '''
     returns a dict of baseTables given a set of pmmCoefficients
     
     '''
     baseTable = None
+    correctionTable = None
     if tableName == 'DRIFT':
       motion = 1
       icoty = 0
       ipmms = 1
       uo = self.serviceSpeed
       baseTable,multiPliers = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
-    return baseTable,multiPliers
+      #Get correction table
+      correctionTable,_ = self.pmms(pmmcoefs,motion,1,uo,ipmms)
+    return baseTable,multiPliers,correctionTable
     
 
   def linearDamping(self):
@@ -1021,12 +1039,17 @@ if __name__ == '__main__':
     for line in f:
       splt = line.split()
       pmmCoefs[splt[0]] = float(splt[1])/1.0E5
-  baseTable,multiPliers = hull_Thumbs.getBaseTable(pmmCoefs,'DRIFT')
+  baseTable,multiPliers,correctionTable = hull_Thumbs.getForceTables(pmmCoefs,'DRIFT')
   plt.plot(baseTable,label='X_HL(BETAD)')
   plt.legend()
   plt.grid()
   plt.show()
   pass
+# %%
+  xvals = [x for x in correctionTable.columns]
+  plt.plot(xvals,correctionTable.loc[-180.0,:])
+  plt.grid()
+  plt.xlabel('TOH')
 
            
           
