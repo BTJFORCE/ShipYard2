@@ -36,6 +36,7 @@ shipDatadict['blockCoefficient'] = 0.704661757
 shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
 shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
 shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['Lpp'],shipDatadict['Lpp']])
+shipDatadict['SeparationPoint'] = 45.0
 
 class KtKqMethods(unittest.TestCase):
     @classmethod
@@ -146,6 +147,16 @@ class TestHullThumbs(unittest.TestCase):
         absc1,absc2 = self.hull_thumbs.defval(1,0)
         assert absc2 is None, "absc2 should be none"
         assert len(absc1)==31,"absc1 should have length 31"
+        pass
+    def test_getForceTables(self):
+        with open(r"H:\GitRepos\ShipYard2\data\PMMdata\3949NeuPMMDe_005_001.txt",'r') as f:
+            pmmCoefs = {}
+            for line in f:
+                splt = line.split()
+                pmmCoefs[splt[0]] = float(splt[1])/1.0E5       
+        # test getting drift tables 
+        baseTables,correctionTables = self.hull_thumbs.getForceTables(pmmCoefs,'DRIFT')
+        np.testing.assert_allclose(baseTables['X_HL = DRIFT'].loc[-135.0],-0.001649,rtol=0.001)
         pass
     
 

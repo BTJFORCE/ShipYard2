@@ -77,11 +77,11 @@ class HullThumbs(Thumbs.Thumbs):
     self.N_HLBaseTables= self.Y_HLBaseTables.copy()
     
     # for each drift table set the variable name and the scale factors the speed parameter will be updated later
-    self.DriftMultiPliers={'X_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea},
+    self.MultiPliers={'DRIFT':{'X_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea},
                            'Y_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea},
                            'K_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea,'DM':self.meanDraft},
                            'N_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
-                          }
+                          }}
     print('!!! To save time during development we read acoef and bcoef from files !!!')
     #the dmimix calculate a and b coefficients for shallow water correction
     #it is time consuming and for debug purpose they are for now read from files
@@ -129,6 +129,10 @@ class HullThumbs(Thumbs.Thumbs):
     return udim,vdim,rdim,qdim,pdim,ddim
 
   def updateMultiplierWithActualSpeed(self,multiPlierDict,speed_dict):
+    '''
+    if a key from multiplierDict is found in speed_dic then 
+    update the actual multiplier dict with the actual speed
+    '''
     for key in multiPlierDict.keys():  
       if key in speed_dict.keys():
         multiPlierDict[key] = speed_dict[key]
@@ -164,9 +168,9 @@ class HullThumbs(Thumbs.Thumbs):
    
     
     if motion == 1: # Drift
-      X_HL_multiPliers = self.DriftMultiPliers['X_HL']
-      Y_HL_multiPliers = self.DriftMultiPliers['Y_HL']
-      N_HL_multiPliers = self.DriftMultiPliers['N_HL']
+      X_HL_multiPliers = self.MultiPliers['DRIFT']['X_HL']
+      Y_HL_multiPliers = self.MultiPliers['DRIFT']['Y_HL']
+      N_HL_multiPliers = self.MultiPliers['DRIFT']['N_HL']
       X_HL_Drift ={}
       Y_HL_Drift ={}
       N_HL_Drift ={}
@@ -183,7 +187,6 @@ class HullThumbs(Thumbs.Thumbs):
         coftyp,ucar = self.pmmmsm(uoo,betad,gamma,pmmtyp,SepPoint)
         ucar = self.pmmcar(uoo,betad,coftyp)
         gamma = delta = heel = epsil = 0.0  
-       
 
         udim,vdim,rdim,qdim,pdim,ddim = self.pmmmot(ucar,betad,gamma,delta,heel,epsil)
         speed_dict = self.hluref(udim,vdim,rdim,pdim)
@@ -196,7 +199,7 @@ class HullThumbs(Thumbs.Thumbs):
         uo = self.serviceSpeed
         fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
         xfactor = 1
-        if icoty == 0: #Base table
+        if icoty == 0: #BaseTable
           X_HL = self.getForceCoefficient(X_HL_multiPliers,fdimu2[0],utot2)
           Y_HL = self.getForceCoefficient(Y_HL_multiPliers,fdimu2[1],utot2)
           N_HL = self.getForceCoefficient(N_HL_multiPliers,fdimu2[2],utot2)
@@ -223,57 +226,54 @@ class HullThumbs(Thumbs.Thumbs):
             correctionTableX_HL[ixbeta,ix] = fdimu2[0]/FBASE[0]
             correctionTableY_HL[ixbeta,ix] = fdimu2[1]/FBASE[1]
             correctionTableN_HL[ixbeta,ix] = fdimu2[2]/FBASE[2]
-            
-          pass
-            
-
-    
-    if icoty == 0:
-      driftTables = {}
-   
-      dfx = pd.DataFrame(index=X_HL_Drift.keys(),data=X_HL_Drift.values())
-      dfx.index.name = 'BETAD'
-      dfx = dfx.rename(columns={0:'X_HL'})
-     
-  # These comments and the following code transfered and translated from fortran code    
-  #cbla    the next if block are made to make the X_HL for drift look right,
-  #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
-  #cbla    to get the value at 45 degree and make the table symmetrical. 
-  #cbla    The 1.5 factor is taken from ship3005. 
+          pass # just used for debug after looping over toh's
+      if icoty == 0:  # construct baseTables
+        driftTables = {}
+        dfx = pd.DataFrame(index=X_HL_Drift.keys(),data=X_HL_Drift.values())
+        dfx.index.name = 'BETAD'
+        dfx = dfx.rename(columns={0:'X_HL'})
+      
+        # These comments and the following code transfered and translated from fortran code    
+        #cbla    the next if block are made to make the X_HL for drift look right,
+        #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
+        #cbla    to get the value at 45 degree and make the table symmetrical. 
+        #cbla    The 1.5 factor is taken from ship3005. 
+          
+        #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
+        #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
+        #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
+        #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
+        dfx.loc[-135.0]  = -1.5* dfx.loc[-20.0]
+        dfx.loc[-70.0]   = dfx.loc[-20.0]
+        dfx.loc[-45.0]   = 1.5* dfx.loc[-20.0]
+        dfx.loc[ 45.0]   = 1.5* dfx.loc[-20.0]
+        dfx.loc[ 70.0]   = dfx.loc[-20.0]
+        dfx.loc[ 135.0]  = -1.5* dfx.loc[-20.0]
         
-      #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
-      #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
-      #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
-      #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
-      dfx.loc[-135.0]  = -1.5* dfx.loc[-20.0]
-      dfx.loc[-70.0]   = dfx.loc[-20.0]
-      dfx.loc[-45.0]   = 1.5* dfx.loc[-20.0]
-      dfx.loc[ 45.0]   = 1.5* dfx.loc[-20.0]
-      dfx.loc[ 70.0]   = dfx.loc[-20.0]
-      dfx.loc[ 135.0]  = -1.5* dfx.loc[-20.0]
-      
-      dfy = pd.DataFrame(index=Y_HL_Drift.keys(),data=Y_HL_Drift.values())
-      dfy.index.name = 'BETAD'
-      dfy = dfy.rename(columns={0:'Y_HL'})
-  
-      dfn = pd.DataFrame(index=Y_HL_Drift.keys(),data=N_HL_Drift.values())
-      dfn.index.name = 'BETAD'
-      dfn = dfn.rename(columns={0:'N_HL'})    
+        dfy = pd.DataFrame(index=Y_HL_Drift.keys(),data=Y_HL_Drift.values())
+        dfy.index.name = 'BETAD'
+        dfy = dfy.rename(columns={0:'Y_HL'})
+    
+        dfn = pd.DataFrame(index=Y_HL_Drift.keys(),data=N_HL_Drift.values())
+        dfn.index.name = 'BETAD'
+        dfn = dfn.rename(columns={0:'N_HL'})    
 
-      
-      driftTables['X_HL = DRIFT'] = dfx
-      driftTables['Y_HL = DRIFT'] = dfy
-      driftTables['N_HL = DRIFT'] = dfn
-      
-    else:
-      driftTables = {}
-      dfx = pd.DataFrame(correctionTableX_HL,index=absc1,columns=absc2)
-      dfy = pd.DataFrame(correctionTableY_HL,index=absc1,columns=absc2)
-      dfn = pd.DataFrame(correctionTableN_HL,index=absc1,columns=absc2)
-      driftTables['X_HL(BETAD,TOH)']=dfx
-      driftTables['Y_HL(BETAD,TOH)']=dfy
-      driftTables['N_HL(BETAD,TOH)']=dfy
-    return driftTables
+        driftTables['X_HL = DRIFT'] = dfx
+        driftTables['Y_HL = DRIFT'] = dfy
+        driftTables['N_HL = DRIFT'] = dfn    
+      else: # construct correction tables
+        driftTables = {}
+        dfx = pd.DataFrame(correctionTableX_HL,index=absc1,columns=absc2)
+        dfy = pd.DataFrame(correctionTableY_HL,index=absc1,columns=absc2)
+        dfn = pd.DataFrame(correctionTableN_HL,index=absc1,columns=absc2)
+        driftTables['X_HL(BETAD,TOH)']=dfx
+        driftTables['Y_HL(BETAD,TOH)']=dfy
+        driftTables['N_HL(BETAD,TOH)']=dfy
+      pass # end if motion == 1 aka DRIFT
+      return driftTables
+    elif motion == 2: # YAW
+      pass
+      return yawTables
   
 
   def getForceTables(self,pmmcoefs,tableName):
@@ -404,13 +404,13 @@ class HullThumbs(Thumbs.Thumbs):
   
   def getSurgeDamping(self):
     return self.SurgeDamping
-  def getSwayDamping(sel):
+  def getSwayDamping(self):
     return self.SwayDamping
-  def getRollDamping(sel):
+  def getRollDamping(self):
     return self.RollDamping
-  def getPitchDamping(sel):
+  def getPitchDamping(self):
     return self.PitchDamping
-  def getHeaveDamping(sel):
+  def getHeaveDamping(self):
     return self.HeaveDamping     
 
 
@@ -946,7 +946,7 @@ class HullThumbs(Thumbs.Thumbs):
       
       
       
-  def pmmfor(self,pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh):
+  def pmmfor(self,pmmCoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh):
     '''
     this function calculates the forces on the hull using the PMM coefficient/hydrodynamic derivatives
     the function is translate to python by BTJ originally part of shipYard1 see tfs
@@ -1066,10 +1066,11 @@ class HullThumbs(Thumbs.Thumbs):
         
         
 # %%
-import matplotlib.pyplot as plt
-import numpy as np
+
 if __name__ == '__main__':
-  
+  import matplotlib.pyplot as plt
+  from mpl_toolkits.mplot3d import Axes3D
+  import numpy as np  
   shipDatadict={}
   shipDatadict['shipnr'] = 3949
   shipDatadict['lpp'] = 312
@@ -1097,37 +1098,37 @@ if __name__ == '__main__':
     for line in f:
       splt = line.split()
       pmmCoefs[splt[0]] = float(splt[1])/1.0E5
+  #get base and correctionTables for Drift
   baseTables,correctionTables = hull_Thumbs.getForceTables(pmmCoefs,'DRIFT')
+  # plot results
   plt.plot(baseTables['X_HL = DRIFT'],label='X_HL(BETAD)')
   plt.legend()
+  plt.xlabel('BETAD')
+  plt.title('X_HL(BETAD)')
   plt.grid()
   plt.show()
   pass
 # %%
-  xvals = [x for x in correctionTable.columns]
-  plt.plot(xvals,correctionTable.loc[-180.0,:])
-  plt.grid()
-  plt.xlabel('TOH')
+  import plotly.graph_objects as go
+  fig = go.Figure(data=[go.Surface(z=correctionTables['X_HL(BETAD,TOH)'].values, x=correctionTables['X_HL(BETAD,TOH)'].index, y=correctionTables['X_HL(BETAD,TOH)'].columns)])
+  # Update layout
+  fig.update_layout(title='X_HL(BETAD,TOH)', autosize=False,
+                    width=500, height=500,
+                    margin=dict(l=65, r=50, b=65, t=90))
 
+  # Show the plot
+  fig.show()
+  ##
+  print(f"############ DRIFT X;Y;N and corresponding TOH tables are ready")
            
-          
 
-        
-        
-        
-        
-        
-      
-    
-
-
-
-# %%
-dfSY1 = pd.read_csv(r'H:\GitRepos\ShipYard2\data\PMMdata\SY1hull3949XHL_DriftBetaD.dat',header=None,sep='\s+')
-# %%
-plt.plot(baseTable,'-*',label='SY2:X_HL(BETAD)')
-plt.plot(dfSY1[0],dfSY1[1],'-*',label='SY1')
-plt.legend()
-plt.grid()
-plt.show()
+  # %%
+  dfSY1 = pd.read_csv(r'H:\GitRepos\ShipYard2\data\PMMdata\SY1hull3949XHL_DriftBetaD.dat',header=None,sep='\s+')
+  # %%
+  plt.plot(baseTables['X_HL = DRIFT'],'-*',label='SY2:X_HL(BETAD)')
+  plt.plot(dfSY1[0],dfSY1[1],'-*',label='SY1')
+  plt.legend()
+  plt.grid()
+  plt.show()
+  pass
 # %%
