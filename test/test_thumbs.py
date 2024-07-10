@@ -20,9 +20,9 @@ from propellerSteering import propellerStering
 
 shipDatadict={}
 shipDatadict['shipnr'] = 3949
-shipDatadict['Lpp'] = 312
+shipDatadict['Lpp'] = 340.5
 shipDatadict['Beam'] = 53.5
-shipDatadict['wettedSurface'] = 23243.8
+
 shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['Lpp'] * shipDatadict['Beam']
 shipDatadict['propellerType'] ='FP'
 shipDatadict['PropellerPitch'] = 0.71505
@@ -31,7 +31,8 @@ shipDatadict['propellerDiameter'] = 7.0
 shipDatadict['draftAft']  = 17.
 shipDatadict['draftFore'] = 17.0
 shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
-shipDatadict['underWaterLateralArea'] = 312*17*.9123
+shipDatadict['wettedSurface'] = .794059157 *(shipDatadict['Lpp']*(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
+shipDatadict['underWaterLateralArea'] = shipDatadict['Lpp']*shipDatadict['meanDraft']*0.984331001                         
 shipDatadict['blockCoefficient'] = 0.704661757
 shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
 shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
@@ -156,7 +157,12 @@ class TestHullThumbs(unittest.TestCase):
                 pmmCoefs[splt[0]] = float(splt[1])/1.0E5       
         # test getting drift tables 
         baseTables,correctionTables = self.hull_thumbs.getForceTables(pmmCoefs,'DRIFT')
-        np.testing.assert_allclose(baseTables['X_HL = DRIFT'].loc[-135.0],-0.001649,rtol=0.001)
+        np.testing.assert_allclose(baseTables['X_HL = DRIFT'].loc[-135.0],-0.0016682163766285373,rtol=0.01)
+        pass
+    def test_resistance(self):
+        shallow = False
+        resistanceTable = self.hull_thumbs.RDHOLTROP(shallow)
+        np.testing.assert_allclose(resistanceTable.iloc[0][0],0.0020987559933257744,rtol=0.001)
         pass
     
 

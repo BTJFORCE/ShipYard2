@@ -181,7 +181,7 @@ class wake(pThumbs.Thumbs):
         K6r = self.verticalCenterBulb
         L9 = self.lengthWaterLine
         C8 = self.waterLineBlock
-        Cx3=.56*Xbulb**1.5/(B9*T9*(.31*np.sqrt(Xbulb)+Fmfore-K6r))
+        Cx3=self.Cx3()
         Cx2=(-1.89)*np.sqrt(Cx3)
 
         Cx2=np.exp(Cx2)

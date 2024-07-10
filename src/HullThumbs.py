@@ -81,6 +81,10 @@ class HullThumbs(Thumbs.Thumbs):
                            'Y_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea},
                            'K_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea,'DM':self.meanDraft},
                            'N_HL':{'WHRD2':self.rho/2.,'UR_D':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
+                          },
+                      'YAW':{'X_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea},
+                           'Y_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea},
+                           'N_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
                           }}
     print('!!! To save time during development we read acoef and bcoef from files !!!')
     #the dmimix calculate a and b coefficients for shallow water correction
@@ -97,7 +101,212 @@ class HullThumbs(Thumbs.Thumbs):
       with open(r'data\PMMdata\bcoef.json','w') as file:
         json.dump(self.bcoef,file)
     pass
+  
+  def RESIS(self,shallow,velocity):
+    V5 = velocity
+    M9 = 1.026 ## as in fortran code
+    S4 = M9 - 1
+    T6 = 15.0   #! Water temperature
+    S9 = self.wettedSurface
+    K8 = self.WettedSurfaceAppendage
+    K8 = 1 + K8/S9	# Wetted surface correction(total ship) (K8 was
+	                  # before this statement the wetted surface for appendages!)
+    L9 = self.lengthWaterLine
+    B9 = self.beam
+    T9 = self.meanDraft
+    V0 = self.displacement
+    C3 = self.midshipSection
+    FORMAL = self.Formal
+    O1 = self.LCB_ratio
+    C8 = self.waterLineBlock
+    C9 = self.prismaticCoefficeint    
+    CWAT = self.waterPlaneArea/( self.Lpp * self.beam)
+    ATRANS = self.ship_data['transomArea']
+    M = self.someCoefficient
+    GRAV = g
+    K6R = self.verticalCenterBulb
+    FMFORE = self.draftFore
+    ABULB = self.Abulb
+    XBULB=ABULB*B9*T9*C3
+
+
+    Cx3=self.Cx3()    
+    LRUN = L9*(1-C9+0.06*C9*(O1*100)/(4*C9-1)) #! Length of run from Holtrop paper
+                                               #C -   Remember that lcb in Holtrop paper is percentage!
+    K6A= 1+89*np.exp((-(L9/B9)**.80856)*(1-CWAT)**.30484   \
+     	*(1-C9-2.25*O1)**.6367*(LRUN/B9)**.34574			\
+     	*(100*V0/L9**3)**.16302) # ! iE from Holtrop,half angle of incid.
+    VISCO = (12.0433-31.38*S4)*(T6+20)**(-.482+1.72*S4)-1.0312 -5.779*S4
+    VT = V5
+    IT = 0
+    CBAR = 0
+    F1 = V5/np.sqrt(L9*9.80665)
+    K5 = .5*np.log10(V0)-.1*np.log10(V0)**2
+    R1 = V5*L9/VISCO*1000000  
+    if  shallow:
+      R1 = VT*L9/VISCO*1000000  
+    if  R1 < 1000.:
+      R1=1000.
+    C6 = 1000*.075/(np.log10(R1)-2)**2
+    RFRIC = .5*M9*VT**2*C6*S9/1000
+    if shallow :
+      RFRIC = .5*M9*VT**2*C6*FORMAL*S9*K8/1000
+    if not shallow:
+      R0 = .5*M9*V5**2*C6*FORMAL*S9*K8/1000 #!This is: Rf(1+k1) including appendages    
+    CX7 = .229577*(B9/L9)**.33333
+    if B9/L9 > .11:
+      CX7 = B9/L9
+    if B9/L9 > .25:
+      CX7 = .5-.0625*L9/B9
+    CX1 = 2223105*CX7**3.78613*(T9/B9)**1.07961*(90-K6A)**(-1.37565)
+    CX3 = self.Cx3()
+    CX2 = np.exp((-1.89)*np.sqrt(CX3))
+    CX5 = 1-.8*ATRANS
+    CX16 = 8.07981*C9-13.8673*C9**2+6.984388*C9**3
+    if C9 > .8: 
+      CX16 =1.73014-.7067*C9
+    M1 = .0140407*L9/T9-1.75254/M-4.79323*B9/L9-CX16
+    CX15 = -1.69385
+    if (M > 8):
+       CX15 = -1.69385+(M-8)/2.36
+    if (M > 12) :
+      CX15 = 0 
+    LDA = 1.446*C9-.03*L9/B9
+    if (L9/B9 > 12) :
+      LDA = 1.446*C9-.36
+    FNX = F1
+    if (FNX > .4):
+     FNX = .4
+    RXP = 0
+    if (np.abs(FNX) > 1.E-6) :
+      rdummy=(-.034)*FNX**(-3.29)
+      if (rdummy < -80.0) :
+        rdummy=0.0
+      else:
+	      rdummy=np.exp(rdummy)
+	      rdummy=CX15*.4*rdummy
+      M2=rdummy
+      rdummy=(M1*FNX**(-.9)+M2*np.cos(LDA/FNX**2))
+      if (rdummy < -80.0) :
+        rdummy=0.0
+      else:
+	      rdummy=np.exp(rdummy)
+	      rdummy=CX1*CX2*CX5*rdummy*V0*M9*GRAV
+      RXP=rdummy
+    if (F1 > .55):
+       RXP = 0
+    if (F1 > .4):
+       RXP = RXP*(5.5-10*F1)/1.5
+    FNX = F1
+    if (FNX < .55):
+       FNX = .55
+    M2 = CX15*.4*np.exp((-.034)*FNX**(-3.29))
+    CX17 = 6919.3*C3**(-1.3346)*(V0/L9**3)**2.00977*(L9/B9-2)**1.40692
+    M3 = (-7.2035)*(B9/L9)**.326869*(T9/B9)**.605375
+    RYP = CX17*CX2*CX5*np.exp(M3*FNX**(-.9)+M2*np.cos(LDA/FNX**2))*V0*M9*GRAV # Rw-b for FN>0.55
+    if (F1 < .4):
+       RYP = 0
+    if (F1 < .55):
+       RYP = RYP*(10*F1-4)/1.5 #Interpolation 0.4<FN<.55  
+    if (shallow) :
+        R0 = RXP+RYP
+    else:
+        R0 = R0+RXP+RYP
+    #CJBP 990222 Holtrop 1984 recommends this statement, i.e. not in I-SHIP
+    if ( K6R > 0.6*FMFORE ) :
+      K6R = 0.6*FMFORE
+    #CJBP Holtrop 1998 bulb correction as 1984 seems too strong for the Lindø VLCC!
+    if ( ABULB > 0.12 ) :
+	    XBULB = 0.12*B9*T9*C3    #! To ensure reasonable bulb resistance
+    FORSINHF = B9*T9*C9*C3*(136.0-316.3*F1)*F1**3/L9
+    if ( FORSINHF < -0.01*L9 ):
+       FORSINHF = -0.01*L9
+    LOCWAVHW = V5**2*K6A/(400*GRAV)
+    if ( LOCWAVHW > 0.01*L9 ) :
+      LOCWAVHW = 0.01*L9
+    FNI = V5/np.sqrt(GRAV*(FMFORE-K6R-0.25*np.sqrt(XBULB)+FORSINHF+LOCWAVHW))
+    PB = 0.56*np.sqrt(XBULB)/(FMFORE-1.5*K6R+FORSINHF)
+    RBULB = .11*np.exp((-3)/PB**2)*FNI**3*XBULB**1.5*M9*GRAV/(1+FNI**2)    
+    if ( ABULB > 0.12 ) :
+	    XBULB = ABULB*B9*T9*C3    # To reset bulb area for wave resistance
+    #C --- Here we do the transom stern correction
+    if (np.abs(ATRANS) > 1.E-6) :
+      if (shallow) :
+        FNT = VT/np.sqrt(2*GRAV*ATRANS*T9*C3/(1+CWAT))
+      else: 
+        FNT = V5/np.sqrt(2*GRAV*ATRANS*T9*C3/(1+CWAT))
+      CX6 = 0
+      if (FNT < 5):
+        CX6 = .2*(1-.2*FNT)
+      if (shallow) :
+        R0 = R0+.5*M9*VT*VT*ATRANS*CX6*B9*T9*C3
+      else:
+        R0 = R0+.5*M9*V5*V5*ATRANS*CX6*B9*T9*C3 #R0 + Rtr in Holtrop
+    CX4 = FMFORE/L9
+    if (CX4 >.04) :
+      CX4 = .04
+    CXA = .00546*(L9+100)**(-.16)-.00205+.003*np.sqrt(L9/7.5)*C8**4*CX2*(.04-CX4) #This is model ship correlation coefficient Ca
+    if CXA < 0.0 :
+      CXA = 0.0
+    if (shallow) :
+      R0 = R0+.5*M9*VT**2*CXA*S9*K8+RFRIC
+    else:
+      R0 = R0+.5*M9*V5**2*CXA*S9*K8         
+    return R0
     
+  def RDHOLTROP(self,shallow):  
+    '''
+    This routine calculate the resistance table according to Holtrop
+    '''
+    MAXSPEED =  1.4 * self.serviceSpeed
+    MINSPEED = -1.0 * self.serviceSpeed
+    NAHEAINT = 14
+    NASTINT = 8
+    velnegative = np.linspace(MINSPEED,-1.0E-2,NASTINT,endpoint=True)
+    velpositive = np.linspace(0,MAXSPEED,NAHEAINT,endpoint=True)
+    #set the first positive speed as in fortran code
+    velpositive[1] = 1.0E-2
+    velocities = np.concatenate((velnegative, velpositive))
+    Frouden = np.zeros(len(velocities))
+    Ctotal = np.zeros(len(velocities))
+    S9 = self.wettedSurface
+    L5 = self.Lpp
+    T9 = self.meanDraft
+    
+    for i in range(len(velocities)):
+      v5 = velocities[i]
+      if velocities[i] < 0.0:
+          v5 = abs(v5)
+      Frouden[i] = v5/np.sqrt(9.81*self.Lpp)
+      if v5 != 0.0:
+          R0 = self.RESIS(shallow,v5)
+      else:
+          R0 = 0.0
+      if np.abs(v5) < 2.0E-3:
+          if v5 == 0.0:
+              C0 = 0.0
+          else:
+              C0 = np.abs(R0/(.5*1.025*S9*v5**2))
+      else:
+          C0 = R0/(.5*1.025*S9*v5**2)
+
+      # When Froude No. is less than .1 the resistance coefficient is a combination of OCIMF and Holtrop
+      Cocimf = 0.036*L5*T9/S9  # 0.036 See OCIMF 1994
+      Focimf = abs((0.1 - Frouden[i])*1/0.1)*((0.1 - Frouden[i])*1/0.1)
+      if Focimf > 0:
+          if C0 != 0:
+              C0 = Focimf*Cocimf + (1-Focimf)*C0
+      if velocities[i] < 0.0:
+          C0 = -1.1*C0
+          v5 = -v5
+          Frouden[i] = -Frouden[i]
+      Ctotal[i] = -C0
+      #print(v5, ' ', Frouden[i], ' ', Ctotal[i], ' ', R0)
+      
+    df = pd.DataFrame(index=Frouden,data=Ctotal)
+    df.index.name = 'FN'
+    df = df.rename(columns={0:'X_HL'})
+    return df
     
 
   
@@ -145,7 +354,7 @@ class HullThumbs(Thumbs.Thumbs):
     return force*utot2/factor      
   
   
-  def pmms(self,pmmcoefs,motion,icoty,uoo,ipmms):
+  def pmms(self,pmmcoefs,motion,icoty,uo,ipmms):
     '''
     the function is highly modified compared to original fortran version
     the purpose is to convert coefficient model to table model
@@ -184,7 +393,8 @@ class HullThumbs(Thumbs.Thumbs):
         gamma = 0
         pmmtyp = 1
         SepPoint = self.SeparationPoint
-        coftyp,ucar = self.pmmmsm(uoo,betad,gamma,pmmtyp,SepPoint)
+        coftyp,ucar = self.pmmmsm(uo,betad,gamma,pmmtyp,SepPoint)
+        uoo = ucar
         ucar = self.pmmcar(uoo,betad,coftyp)
         gamma = delta = heel = epsil = 0.0  
 
@@ -198,7 +408,7 @@ class HullThumbs(Thumbs.Thumbs):
         toh=0
         uo = self.serviceSpeed
         fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
-        xfactor = 1
+       
         if icoty == 0: #BaseTable
           X_HL = self.getForceCoefficient(X_HL_multiPliers,fdimu2[0],utot2)
           Y_HL = self.getForceCoefficient(Y_HL_multiPliers,fdimu2[1],utot2)
@@ -272,7 +482,94 @@ class HullThumbs(Thumbs.Thumbs):
       pass # end if motion == 1 aka DRIFT
       return driftTables
     elif motion == 2: # YAW
-      pass
+      X_HL_multiPliers = self.MultiPliers['YAW']['X_HL']
+      Y_HL_multiPliers = self.MultiPliers['YAW']['Y_HL']
+      N_HL_multiPliers = self.MultiPliers['YAW']['N_HL']
+      X_HL_Yaw ={}
+      Y_HL_Yaw ={}
+      N_HL_Yaw ={}
+      if absc2 != None:
+        correctionTableX_HL = np.zeros((len(absc1),len(absc2)))
+        correctionTableY_HL = np.zeros((len(absc1),len(absc2)))
+        correctionTableN_HL = np.zeros((len(absc1),len(absc2)))
+      for ixgamma,gamma in enumerate(absc1):
+        dummy = gamma
+        gamma = np.radians(gamma)
+        betad = 0
+        pmmtyp = 1
+        SepPoint = self.SeparationPoint
+        coftyp,ucar = self.pmmmsm(uo,betad,gamma,pmmtyp,SepPoint)
+        
+        uoo = ucar
+        ucar = self.pmmcar(uoo,betad,coftyp)
+        delta = heel = epsil = 0.0  
+
+        udim,vdim,rdim,qdim,pdim,ddim = self.pmmmot(ucar,betad,gamma,delta,heel,epsil)
+        speed_dict = self.hluref(udim,vdim,rdim,pdim)
+        # update the multipliers with speed values if they are available
+        X_HL_multiPliers = self.updateMultiplierWithActualSpeed(X_HL_multiPliers,speed_dict)
+        Y_HL_multiPliers = self.updateMultiplierWithActualSpeed(Y_HL_multiPliers,speed_dict)        
+        N_HL_multiPliers = self.updateMultiplierWithActualSpeed(N_HL_multiPliers,speed_dict)
+
+        toh=0
+        uo = self.serviceSpeed
+        fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
+        if np.abs(dummy) == 90.0 :
+          print('Can not see how this works in the fortan code but Y and X (gamma) seems to be zero so hardcoded here !!')
+          fdimu2[0] = 0.0
+          fdimu2[1] = 0.0
+       
+        if icoty == 0: #BaseTable
+          X_HL = self.getForceCoefficient(X_HL_multiPliers,fdimu2[0],utot2)
+          Y_HL = self.getForceCoefficient(Y_HL_multiPliers,fdimu2[1],utot2)
+          N_HL = self.getForceCoefficient(N_HL_multiPliers,fdimu2[2],utot2)
+    
+          X_HL_Yaw[dummy] = X_HL       
+          Y_HL_Yaw[dummy] = Y_HL
+          N_HL_Yaw[dummy] = N_HL
+            
+        else: ## now we create a correction table
+          FBASE = fdimu2
+          if np.abs(dummy) == 90.0 :
+            print (' need to set FBASE to avoid div 0')
+            FBASE[0] = FBASE[1] = 1.0
+          for ix,toh in enumerate(absc2):
+            if ix == 0:
+              correctionTableX_HL[ixgamma,ix] = 1.0
+              correctionTableY_HL[ixgamma,ix] = 1.0
+              correctionTableN_HL[ixgamma,ix] = 1.0
+              continue
+            fdim,fdimu2,utot2 = self.pmmfor(pmmcoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh)
+            correctionTableX_HL[ixgamma,ix] = fdimu2[0]/FBASE[0]
+            correctionTableY_HL[ixgamma,ix] = fdimu2[1]/FBASE[1]
+            correctionTableN_HL[ixgamma,ix] = fdimu2[2]/FBASE[2]
+          pass # just used for debug after looping over toh's
+      if icoty == 0:  # construct baseTables
+        yawTables = {}
+        dfx = pd.DataFrame(index=X_HL_Yaw.keys(),data=X_HL_Yaw.values())
+        dfx.index.name = 'GAMMA'
+        dfx = dfx.rename(columns={0:'X_HL'})
+        
+        dfy = pd.DataFrame(index=Y_HL_Yaw.keys(),data=Y_HL_Yaw.values())
+        dfy.index.name = 'GAMMA'
+        dfy = dfy.rename(columns={0:'Y_HL'})
+    
+        dfn = pd.DataFrame(index=Y_HL_Yaw.keys(),data=N_HL_Yaw.values())
+        dfn.index.name = 'GAMMA'
+        dfn = dfn.rename(columns={0:'N_HL'})    
+
+        yawTables['X_HL = YAW'] = dfx
+        yawTables['Y_HL = YAW'] = dfy
+        yawTables['N_HL = YAW'] = dfn    
+      else: # construct correction tables
+        yawTables = {}
+        dfx = pd.DataFrame(correctionTableX_HL,index=absc1,columns=absc2)
+        dfy = pd.DataFrame(correctionTableY_HL,index=absc1,columns=absc2)
+        dfn = pd.DataFrame(correctionTableN_HL,index=absc1,columns=absc2)
+        yawTables['X_HL(GAMMA,TOH)']=dfx
+        yawTables['Y_HL(GAMMA,TOH)']=dfy
+        yawTables['N_HL(GAMMA,TOH)']=dfy
+      pass # end if motion == 1 aka DRIFT
       return yawTables
   
 
@@ -288,9 +585,20 @@ class HullThumbs(Thumbs.Thumbs):
       icoty = 0
       ipmms = 1
       uo = self.serviceSpeed
+      #Get baseTables
       baseTables = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
       #Get correction table
-      correctionTables = self.pmms(pmmcoefs,motion,1,uo,ipmms)
+      icoty = 1
+      correctionTables = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
+    elif tableName == 'YAW':
+      motion = 2
+      icoty = 0
+      ipmms = 1
+      uo = self.serviceSpeed
+      baseTables = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
+      #Get correction table
+      icoty = 1
+      correctionTables = self.pmms(pmmcoefs,motion,icoty,uo,ipmms)
     return baseTables,correctionTables
     
 
@@ -564,66 +872,7 @@ class HullThumbs(Thumbs.Thumbs):
         bcoef[index] = bmin
     return acoef,bcoef
     
-  def HoltropResistance(self,velocitiesocities):
-    '''
-    calculate resistance according to Holtrop
-    '''
-    assert(True,'HoltropResistance not implementet fully yet')
-    W5 = 0.0
-    T5 = 0.0
-    L5 = self.Lpp
-    Frouden=np.zeros(len(velocitiesocities))
-    CTotal = np.zeros(len(velocitiesocities))
-    for ix in range(len(velocitiesocities)):
-        V5 = velocities[I]
-        if V5 < 0.0 :
-            V5 = nb.abs(V5)     
-        Frouden[I] = V5/np.sqrt(g *L5)
-    if V5 != 0.0 :
-        self.resis(SHAL,J,LER)
-        pass
-    else:
-        R0 = 0.0
-        
-    if np.abs(V5) < 2.0E-3 :
-        if  V5 <= 0.0 :
-          C0 = 0.0
-        else:
-            C0 = np.abs(R0/(.5*1.025*S9*V5**2))
-    else: 
-        C0 = R0/(.5*1.025*S9*V5**2)
-	     
-
-#C-SHT	 *******	When Froude No. is less than .1 
-##C				the resistance coefficient is a combination of 
-#C				OCIMF and Holtrop:
-#C				
-#C				When abs(Fn)<=0.1:
-#C				Cr = Cocimf*Focimf + Choltrop*(1-Focimf)
-#C				Where 
-#C				Focimf=abs((0.1-Fn)*(1/.1))*((0.1-Fn)*(1/.1))
-#C				
-#C				When abs(Fn)>=0.1:#
-#C				Cr = Choltrop
-#C 
-    Cocimf=0.036*L5*T9/S9 #0.036 See OCIMF 1994
-    Focimf=abs((0.1 - Frouden[I])*1/0.1)*((0.1 - Frouden[I])*1/0.1)
-
-    if (Focimf > 0) :
-      if (C0 != 0) :
-        C0 = Focimf*Cocimf + (1-Focimf)*C0
-
-    #C-SHT ******************************************			 
-    if (velocities[I] < 0.0 ) :
-      C0 = -1.1*C0
-      V5 = -V5
-      FROUDEN[I] = -FROUDEN[I]
-    Ctotal[I] = -C0
-    return FROUDEN,Ctotal
-
-
-
-  
+   
       
   def dmimix(self):
     '''
@@ -939,7 +1188,7 @@ class HullThumbs(Thumbs.Thumbs):
         coftyp=2
 
     ucar = uo
-    if np.abs(np.abs(gamma)-np.radians(90.) < .01):
+    if np.abs(np.abs(gamma)-np.radians(90.)) < .01:
         ucar = 0.
     return coftyp,ucar   
       
@@ -962,10 +1211,6 @@ class HullThumbs(Thumbs.Thumbs):
     nderivatives=['N0','N0U','NUU','NV','NVV','NVIVI','NVVV','NVU','NR','NRR','NRIRI','NRRR','NRIVI','NRVV','NVIRI','NVRR','NVDOT','NRDOT ']
     lpp = self.Lpp
     
-
-
-
-        
     if coftyp == 1:
       utot2 = udim*udim + vdim*vdim
       utot  = np.sqrt(utot2)
@@ -977,120 +1222,164 @@ class HullThumbs(Thumbs.Thumbs):
       D   = ddim
       usign = 1.0
     else:
-        utot2 = 1.
-        utot  = 1.0
-        U   = udim
-        V   = vdim
-        R   = rdim*lpp
-        Q   = qdim
-        P   = pdim*lpp
-        D  = ddim
+      utot2 = 1.
+      utot  = 1.0
+      U   = udim
+      V   = vdim
+      R   = rdim*lpp
+      Q   = qdim
+      P   = pdim*lpp
+      D  = ddim
 #     if vdim and udim is zero we jump over the next because when gamma is -90 or 90
 #     this would lead to not a number (NAN) for BETAMSMFQ, which are used in the XVVSPEC coef.
-    if (np.sqrt(vdim**2+udim**2) < 0.000001) :
-      usign = np.sign(1.0,U)
-    else:
-      BETAMSMFQ=np.sign(udim)*(-np.arcsin(vdim/np.sqrt(vdim**2+udim**2)))
-      usign = np.sign(U)
-      pass
-      # X --- force
-      xcoeff=np.array([])
-      speedvector=np.array([])
-      TOHCorrection=np.array([])
-      #inserting coefs and speed in arrays so we can do simple array multiplication to calculate force
-      # check for key in dict needs to be added
-      for val in xderivatives:
-        if val in pmmCoefs.keys():
-          if 'DOT' in val:
-            continue  # in the fortran PMMFOR no DOT derivatives appears
-          xcoeff=np.append(xcoeff,pmmCoefs[val])
-          speedvector=np.append(speedvector,self.speedfactor(val,U,V,R))
-          if val in acoef.keys():
-            a = acoef[val]
-            b = bcoef[val]
-          else:
-            a = 0
-            b = 1
-          TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))
-          
-      fdimu2[0]= np.sum(xcoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
-      fdim[0] = fdimu2[0]*utot2
-      # Y-force
-      ycoeff=np.array([])
-      speedvector=np.array([])
-      TOHCorrection=np.array([])
-      for val in yderivatives:
-        if val in pmmCoefs.keys():
-          if 'DOT' in val:
-            continue  # in the fortran PMMFOR no DOT derivatives appears
-          ycoeff=np.append(ycoeff,pmmCoefs[val])
-          speedvector=np.append(speedvector,self.speedfactor(val,U,V,R)) 
-          if val in acoef.keys():
-            a = acoef[val]
-            b = bcoef[val]
-          else:
-            a = 0
-            b = 1
-          TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))       
-      
-      fdimu2[1]= np.sum(ycoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
-      fdim[1] = fdimu2[1]*utot2    
-      # N-moment
-      ncoeff=np.array([])
-      speedvector=np.array([])
-      TOHCorrection=np.array([])
-      for val in nderivatives:
-        if val in pmmCoefs.keys():
-          if 'DOT' in val:
-            continue  # in the fortran PMMFOR not DOT derivatives appears
-          ncoeff=np.append(ncoeff,pmmCoefs[val])
-          speedfactor = self.speedfactor(val,U,V,R)
-          speedvector=np.append(speedvector,speedfactor) 
-          # comment from fortran code
-          #It is believed that N must change its sign for ship going astern
-          #Therefore, USIGN is multiplied to the NvIvI
-          if 'VIVI' in val:
-            speedfactor *= usign
-          if val in acoef.keys():
-            a = acoef[val]
-            b = bcoef[val]
-          else:
-            a = 0
-            b = 1            
-          TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b)*speedfactor)        
-      
-      fdimu2[2]= np.sum(ncoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**3
-      fdim[2] = fdimu2[2]*utot2      
-      
-      return fdim,fdimu2,utot2      
+      if (np.sqrt(vdim**2+udim**2) < 0.000001) :
+        usign = np.sign(U)
+        '''
+        if U == 0:
+          usign = 0
+        elif U > 0:
+          usign = 1
+        elif U < 0:
+          usign = -1
+        '''
+      else:
+        BETAMSMFQ=np.sign(udim)*(-np.arcsin(vdim/np.sqrt(vdim**2+udim**2)))
+        usign = np.sign(U)
+        pass
+    # X --- force
+    xcoeff=np.array([])
+    speedvector=np.array([])
+    TOHCorrection=np.array([])
+    #inserting coefs and speed in arrays so we can do simple array multiplication to calculate force
+    # check for key in dict needs to be added
+    for val in xderivatives:
+      if val in pmmCoefs.keys():
+        if 'DOT' in val:
+          continue  # in the fortran PMMFOR no DOT derivatives appears
+        xcoeff=np.append(xcoeff,pmmCoefs[val])
+        speedvector=np.append(speedvector,self.speedfactor(val,U,V,R))
+        if val in acoef.keys():
+          a = acoef[val]
+          b = bcoef[val]
+        else:
+          a = 0
+          b = 1
+        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))
+        
+    fdimu2[0]= np.sum(xcoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
+    fdim[0] = fdimu2[0]*utot2
+    # Y-force
+    ycoeff=np.array([])
+    speedvector=np.array([])
+    TOHCorrection=np.array([])
+    for val in yderivatives:
+      if val in pmmCoefs.keys():
+        if 'DOT' in val:
+          continue  # in the fortran PMMFOR no DOT derivatives appears
+        ycoeff=np.append(ycoeff,pmmCoefs[val])
+        speedvector=np.append(speedvector,self.speedfactor(val,U,V,R)) 
+        if val in acoef.keys():
+          a = acoef[val]
+          b = bcoef[val]
+        else:
+          a = 0
+          b = 1
+        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))       
+    
+    fdimu2[1]= np.sum(ycoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
+    fdim[1] = fdimu2[1]*utot2    
+    # N-moment
+    ncoeff=np.array([])
+    speedvector=np.array([])
+    TOHCorrection=np.array([])
+    for val in nderivatives:
+      if val in pmmCoefs.keys():
+        if 'DOT' in val:
+          continue  # in the fortran PMMFOR not DOT derivatives appears
+        ncoeff=np.append(ncoeff,pmmCoefs[val])
+        speedfactor = self.speedfactor(val,U,V,R)
+        speedvector=np.append(speedvector,speedfactor) 
+        # comment from fortran code
+        #It is believed that N must change its sign for ship going astern
+        #Therefore, USIGN is multiplied to the NvIvI
+        if 'VIVI' in val:
+          speedfactor *= usign
+        if val in acoef.keys():
+          a = acoef[val]
+          b = bcoef[val]
+        else:
+          a = 0
+          b = 1            
+        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b)*speedfactor)        
+    
+    fdimu2[2]= np.sum(ncoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**3
+    fdim[2] = fdimu2[2]*utot2      
+    
+    return fdim,fdimu2,utot2      
         
         
 # %%
 
 if __name__ == '__main__':
   import matplotlib.pyplot as plt
+  import matplotlib.ticker as ticker
   from mpl_toolkits.mplot3d import Axes3D
   import numpy as np  
   shipDatadict={}
   shipDatadict['shipnr'] = 3949
-  shipDatadict['lpp'] = 312
+  shipDatadict['Lpp'] = 340.5
   shipDatadict['Beam'] = 53.5
-  shipDatadict['wettedSurface'] = 23243.8
-  shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['lpp'] * shipDatadict['Beam']
+
+  shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['Lpp'] * shipDatadict['Beam']
   shipDatadict['propellerType'] ='FP'
   shipDatadict['PropellerPitch'] = 0.71505
   shipDatadict['displacement'] =218220.0
   shipDatadict['propellerDiameter'] = 7.0
   shipDatadict['draftAft']  = 17.
   shipDatadict['draftFore'] = 17.0
-  shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
-  shipDatadict['underWaterLateralArea'] = 0.9124 * shipDatadict['lpp'] * shipDatadict['meanDraft']
   shipDatadict['blockCoefficient'] = 0.704661757
-  shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
+  shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
+  shipDatadict['wettedSurface'] = 0.7801584*(shipDatadict['Lpp'] *(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
+  shipDatadict['underWaterLateralArea'] = 0.9124 * shipDatadict['Lpp'] * shipDatadict['meanDraft']
+ 
+  shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
   shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
-  shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['lpp'],shipDatadict['lpp']])
+  shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['Lpp'],shipDatadict['Lpp']])
   shipDatadict['SeparationPoint'] = 45.0
   hull_Thumbs = HullThumbs(shipDatadict)
+# %%
+  ### Resistance table
+ 
+  SY1_XL_FN = [
+    (-1.878140E-01, 2.104312E-03),    (-1.609834E-01, 1.941680E-03),    (-1.341528E-01, 1.899358E-03),
+    (-1.073222E-01, 1.928490E-03),    (-8.049170E-02, 2.293411E-03),    (-5.366113E-02, 3.774366E-03),
+    (-2.683057E-02, 6.356310E-03),    (-1.730242E-04, 9.845336E-03),    (0.000000E+00, 0.000000E+00),
+    (1.730242E-04, -8.950305E-03),    (2.039914E-02, -6.481410E-03),    (4.062525E-02, -4.450279E-03),
+    (6.085137E-02, -2.970214E-03),    (8.107748E-02, -2.067285E-03),    (1.013036E-01, -1.764216E-03),
+    (1.215297E-01, -1.733612E-03),    (1.417558E-01, -1.729059E-03),    (1.619819E-01, -1.768446E-03),
+    (1.822081E-01, -1.871172E-03),    (2.024342E-01, -2.051965E-03),    (2.226603E-01, -2.318379E-03),
+    (2.428864E-01, -2.668396E-03)
+    ]
+# Convert the data to a pandas DataFrame
+  df = pd.DataFrame(SY1_XL_FN,columns=['FN','X_HL']) 
+  
+  shallow = False
+  resistanceTable = hull_Thumbs.RDHOLTROP(shallow)
+  fig, ax = plt.subplots()
+  # Use scientific notation for y axis
+  formatter = ticker.ScalarFormatter(useMathText=True)
+  formatter.set_scientific(True) 
+  formatter.set_powerlimits((-1,1)) 
+  ax.yaxis.set_major_formatter(formatter)
+  plt.plot(df['FN'],df['X_HL'],label='SY1')
+  plt.plot(resistanceTable.index,resistanceTable['X_HL'],label='pySY2')
+  plt.legend()
+  plt.xlabel('FN')
+  plt.title('X_HL(FN)')
+  plt.grid()
+  pass
+# %%
+  
   # !!! dmimix takes a bit of time !!!
   #a,b =hull_Thumbs.dmimix()  
   with open(r'data\PMMdata\3949NeuPMMDe_005_001.txt','r') as f:
@@ -1099,15 +1388,18 @@ if __name__ == '__main__':
       splt = line.split()
       pmmCoefs[splt[0]] = float(splt[1])/1.0E5
   #get base and correctionTables for Drift
-  baseTables,correctionTables = hull_Thumbs.getForceTables(pmmCoefs,'DRIFT')
+  tableType =  'DRIFT'
+  baseTables,correctionTables = hull_Thumbs.getForceTables(pmmCoefs,tableType)
   # plot results
-  plt.plot(baseTables['X_HL = DRIFT'],label='X_HL(BETAD)')
+  print(f"############ DRIFT X;Y;N and corresponding TOH tables are ready")
+  dfSY1 = pd.read_csv(r'H:\GitRepos\ShipYard2\data\PMMdata\SY1hull3949XHL_DriftBetaD.dat',header=None,sep='\s+')
+
+  plt.plot(baseTables['X_HL = DRIFT'],'-*',label='SY2:X_HL(BETAD)')
+  plt.plot(dfSY1[0],dfSY1[1],'-*',label='SY1')
   plt.legend()
-  plt.xlabel('BETAD')
-  plt.title('X_HL(BETAD)')
   plt.grid()
   plt.show()
-  pass
+  pass    
 # %%
   import plotly.graph_objects as go
   fig = go.Figure(data=[go.Surface(z=correctionTables['X_HL(BETAD,TOH)'].values, x=correctionTables['X_HL(BETAD,TOH)'].index, y=correctionTables['X_HL(BETAD,TOH)'].columns)])
@@ -1119,16 +1411,33 @@ if __name__ == '__main__':
   # Show the plot
   fig.show()
   ##
-  print(f"############ DRIFT X;Y;N and corresponding TOH tables are ready")
+   
            
+  # %%
+  tableType = 'YAW'
+  baseTables,correctionTables = hull_Thumbs.getForceTables(pmmCoefs,tableType)
+ 
+  SY1_gamma = [-9.000000E+01, -2.600000E+01, -2.400000E+01, -2.200000E+01, -2.000000E+01, -1.500000E+01,
+                -1.000000E+01, -5.000000E+00, -2.000000E+00, -1.000000E+00,  0.000000E+00,  1.000000E+00,
+                2.000000E+00,  5.000000E+00,  1.000000E+01,  1.500000E+01,  2.000000E+01,  2.200000E+01,
+                2.400000E+01,  2.600000E+01,  9.000000E+01]
+  SY1_X_HL =[  0.000000E+00, -7.491886E-04, -6.449616E-04, -5.470891E-04, -4.560481E-04, -2.611558E-04,
+              -1.175568E-04, -2.961415E-05, -4.748381E-06, -1.187457E-06,  0.000000E+00, -1.187457E-06,
+              -4.748381E-06, -2.961415E-05, -1.175568E-04, -2.611558E-04, -4.560481E-04, -5.470891E-04,
+              -6.449616E-04, -7.491886E-04,  0.000000E+00]
 
-  # %%
-  dfSY1 = pd.read_csv(r'H:\GitRepos\ShipYard2\data\PMMdata\SY1hull3949XHL_DriftBetaD.dat',header=None,sep='\s+')
-  # %%
-  plt.plot(baseTables['X_HL = DRIFT'],'-*',label='SY2:X_HL(BETAD)')
-  plt.plot(dfSY1[0],dfSY1[1],'-*',label='SY1')
+  #print(baseTables['X_HL = YAW'].head())
+  plt.plot(baseTables['X_HL = YAW'],'-*',label='X_HL(GAMMA)')
+  plt.plot(SY1_gamma,SY1_X_HL,'-*',label='SY1_XHL(Gamma)')
   plt.legend()
+  plt.xlabel('GAMMA')
+  plt.title('X_HL(GAMMA)')
   plt.grid()
   plt.show()
   pass
+
+    
+
+  # %%
+
 # %%

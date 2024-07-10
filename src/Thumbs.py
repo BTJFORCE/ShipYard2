@@ -11,11 +11,12 @@ class Thumbs:
 
 
     def __init__(self,shipDatadict):
- 
+        self.ship_data = shipDatadict
+        print( "for now read extra ship data, but should later be transfered from SY2 ")
         self.read_SY1Data(shipDatadict['shipnr'])
-        print('hardcoded some values here for now')
+        
         self.lengthWaterLine = self.ship_data['Length_of_Waterline'] 
-        self.Lpp = shipDatadict['Lpp'] ##312 # From ShipData
+        self.Lpp = shipDatadict['Lpp'] ##340.5 # From ShipData
         self.beam = shipDatadict['Beam'] ##53.5  ## get from shipDataLib
         self.pRatio = self.ship_data['Propeller_Area_Ratio']
         self.wettedSurface = shipDatadict['wettedSurface'] ##23243.8  ## get from shipDataLib
@@ -44,21 +45,42 @@ class Thumbs:
         self.viscocity = self.ship_data['viscocity'] ##1.34066
         self.prismaticCoefficeint = self.ship_data['Prismatic_Coefficient'] ##0.70699
         self.midshipSection = self.ship_data['midshipSection'] ##0.98
-        self.Abulb = self.ship_data['BulbArea'] ##0.004
+        self.transomArea = self.ship_data['transomArea'] ##0.005
+        self.Abulb = self.ship_data['BulbArea'] ##0.04
         self.verticalCenterBulb = self.ship_data['verticalCenterBulb']## 5.0 #Vertical position of center of bulb from BL, m 
         self.LCB_ratio = self.ship_data['LCB_ratio'] ##0.00612186
         self.Fmxaft = self.ship_data['FormFactorStern']
-
+        self.WettedSurfaceAppendage = self.ship_data['WettedSurfaceAppendage']
         self.GMT = self.ship_data['GMT']
         self.GML = self.ship_data['GML']
         self.rho = 1025.0
+        L9 = self.lengthWaterLine
+        V0 = self.displacement
+        self.someCoefficient = L9/V0**(0.3333333) # M in rdholtro
 
 
         #self.areaRatio = aRatio
        # self.Displacement = 100000
         #self.Cp = self.Displacement / (self.lengthWaterLine * self.crossSectionArea) #
+    def Cx3(self):
+        '''
+        This coefficient is both used in wake calculation and resistance calculation and hence
+        contained here
+        '''
+        B9 = self.beam
+        T9 = self.meanDraft
+        C3 = self.midshipSection
+        Abulb = self.Abulb
+        Fmfore = self.draftFore
+        Xbulb=Abulb*B9*T9*C3
+        K6r = self.verticalCenterBulb
+        L9 = self.lengthWaterLine
+        C8 = self.waterLineBlock
+        Cx3=.56*Xbulb**1.5/(B9*T9*(.31*np.sqrt(Xbulb)+Fmfore-K6r))       
+        return Cx3 
+        
     def read_SY1Data(self, shipnr):
-        self.ship_data = {}
+        
         # Assuming the data is in a file called 'data.txt'
         with open(f'U:/ships/ship{shipnr}/ShipYardData{shipnr}.dat', 'r') as file:
             for line in file:
