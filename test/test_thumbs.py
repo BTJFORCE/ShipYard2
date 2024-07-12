@@ -142,6 +142,25 @@ class TestHullThumbs(unittest.TestCase):
         np.testing.assert_allclose(a['XUDOT'],6.014,rtol=0.1)
         #print(a)
         pass
+    def test_pmmmot(self):
+        ucar = 10 * 0.5144 # 10 knots
+        betad = np.radians(45.)
+        gamma = delta = heel = epsil = 0.0
+        udim,vdim,rdim,qdim,pdim,ddim = self.hull_thumbs.pmmmot(ucar,betad,gamma,delta,heel,epsil)
+        np.testing.assert_allclose(np.sqrt(udim**2 + vdim**2),5.144,rtol=0.001)
+        pass
+    def test_speedfactor(self):
+        U=5.144*np.cos(np.radians(45.0))
+        V=5.144*np.sin(np.radians(45.0))
+        R = 0.0
+        coefs = {'XVR':497.3150,'XVV':46.72300}
+        factors =[]
+        for coef in coefs.keys():
+            factor = self.hull_thumbs.speedfactor(coef,U,V,R)
+            factors.append(factor)
+        pass
+        np.testing.assert_allclose(factors[0],0.0,rtol=0.001) #Since R = 0, factor should be 0
+        np.testing.assert_allclose(factors[1],V*V,rtol=0.001) #the XVV should be multiplied with V*V
     def test_defval(self):
         motion = 1
         icoty = 0 # Base model Beta

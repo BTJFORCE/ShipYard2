@@ -103,6 +103,14 @@ class HullThumbs(Thumbs.Thumbs):
     pass
   
   def RESIS(self,shallow,velocity):
+    '''
+    This function calculates the resistance according to Hultrop Mennen , converted to python from 
+    $/SimFlex Classic/src/lib/core/msdat/lib/thmb/resis.f
+    shallow: True -> shallow water resistance calculated else deeo
+    velocity: speed through water in m/s
+    
+    note: indirectly tested through test_resistance
+    '''
     V5 = velocity
     M9 = 1.026 ## as in fortran code
     S4 = M9 - 1
@@ -314,7 +322,7 @@ class HullThumbs(Thumbs.Thumbs):
     '''
     BTJ: think the pmmmot is short for pmm motion
         ucar could be speed of carriage in the towingtank
-    the routine returns 6 dof dimensional speeds depending on speed and driftangle
+    the routine returns 6 dof dimensional speeds depending on speed and driftangle,turnrate..
     '''
     lpp = self.Lpp
     udim  = ucar * np.cos(-betad)
@@ -348,6 +356,12 @@ class HullThumbs(Thumbs.Thumbs):
     return multiPlierDict
     
   def getForceCoefficient(self,multiPlier,force,utot2):
+    '''
+    returns forceCoefficient for a given force and speed
+    multiPlier: dict of multipliers in a given baseTable .eg. mulitipler={'WHRD2':512.5,'UR_D':26.460736,'S':...}
+    force: actual force calculated by pmm coefs
+    utot2: squared speed
+    '''
     factor = 1.0
     for key in multiPlier.keys():
       factor *= multiPlier[key]
@@ -848,7 +862,7 @@ class HullThumbs(Thumbs.Thumbs):
     dfTOH is a dataframe with manoeuvre coefficents and the corresponding shallow water correction
     the routine find the a and b's to be used for shallow water correction, 
     the a's and b's that gives the minimum FUNCAB value is used
-    it is assumed the double loop arround the minimize function is to try to ensure that a global minimum is found
+    BTJ  assume the double loop arround the minimize function is to try to ensure that a global minimum is found
     '''
     acoef={}
     bcoef={}
