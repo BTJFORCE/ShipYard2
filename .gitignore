@@ -9,6 +9,12 @@ test/output/
 # C extensions
 *.so
 
+# .json
+*.json
+
+
+
+
 # Distribution / packaging
 .Python
 build/
@@ -143,7 +149,7 @@ cython_debug/
 # Project specific
 SY2/
 
-src/__pycache__/Thumbs.cpython-39.pyc
+src/__pycache__/*.*
 src/*.joblib
 
 
