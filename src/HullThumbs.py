@@ -367,51 +367,54 @@ class HullThumbs(Thumbs.Thumbs):
       factor *= multiPlier[key]
     return force*utot2/factor    
      
-  def calculate_force_coefficients(self, motion, primary, secondary, absc1, absc2, icoty, uo, pmmcoefs):
-      multipliers = self.MultiPliers[primary]
+  def calculate_force_coefficients(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
+      multipliers = self.MultiPliers[tableType]
       force_coefficients = {key: {} for key in multipliers.keys()}
       correction_table = {key: np.zeros((len(absc1), len(absc2))) if absc2 else None for key in multipliers.keys()}
 
-      for ixa1, primary_val in enumerate(absc1):
-          dummy = primary_val
-          if dummy == -135:
-            idum = 0
-            pass
-          primary_val = np.radians(primary_val)
-          pmmtyp = 1
-          SepPoint = self.SeparationPoint
-          coftyp, ucar = self.pmmmsm(uo, primary_val, secondary, pmmtyp, SepPoint)
+      for ixa1, val in enumerate(absc1):
+        dummy = val
+        if tableType == 'DRIFT':
+          betad = np.radians(val)
+          gamma = 0
+        elif tableType == 'YAW':
+          betad = 0
+          gamma = np.radians(val)
+          
+        pmmtyp = 1
+        SepPoint = self.SeparationPoint
+        coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
 
-          uoo = ucar
-          ucar = self.pmmcar(uoo, primary_val, coftyp)
-          tertiary = delta = heel = epsil = 0.0  
+        uoo = ucar
+        ucar = self.pmmcar(uoo, betad, coftyp)
+        tertiary = delta = heel = epsil = 0.0  
 
-          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, primary_val, secondary, delta, heel, epsil)
-          speed_dict = self.hluref(udim, vdim, rdim, pdim)
-          # update the multipliers with speed values if they are available
-          multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}
+        udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+        speed_dict = self.hluref(udim, vdim, rdim, pdim)
+        # update the multipliers with speed values if they are available
+        multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}
 
-          toh = 0
-          uo = self.serviceSpeed
-          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-          forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
-          if icoty == 0: #BaseTable
-              for key, multiplier in multipliers.items():
+        toh = 0
+        uo = self.serviceSpeed
+        fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+        forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
+        if icoty == 0: #BaseTable
+            for key, multiplier in multipliers.items():
+                if key == 'K_HL':
+                  continue
+                force_coefficients[key][dummy] = self.getForceCoefficient(multiplier, fdimu2[forceIndex[key]], utot2)
+        else: ## now we create a correction table
+            FBASE = fdimu2
+            for ix, toh in enumerate(absc2):
+                if ix == 0:
+                    for key in correction_table.keys():
+                        correction_table[key][ixa1, ix] = 1.0
+                    continue
+                fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+                for key in correction_table.keys():
                   if key == 'K_HL':
                     continue
-                  force_coefficients[key][dummy] = self.getForceCoefficient(multiplier, fdimu2[forceIndex[key]], utot2)
-          else: ## now we create a correction table
-              FBASE = fdimu2
-              for ix, toh in enumerate(absc2):
-                  if ix == 0:
-                      for key in correction_table.keys():
-                          correction_table[key][ixa1, ix] = 1.0
-                      continue
-                  fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-                  for key in correction_table.keys():
-                    if key == 'K_HL':
-                      continue
-                    correction_table[key][ixa1, ix] = fdimu2[forceIndex[key]] / FBASE[forceIndex[key]]
+                  correction_table[key][ixa1, ix] = fdimu2[forceIndex[key]] / FBASE[forceIndex[key]]
       return force_coefficients, correction_table
 
   def pmms(self, pmmcoefs, motion, icoty, uo, ipmms):
@@ -435,16 +438,15 @@ class HullThumbs(Thumbs.Thumbs):
       absc1, absc2 = self.defval(motion, icoty)
 
       if motion in [1, 2]: # Drift or Yaw
-          primary = 'DRIFT' if motion == 1 else 'YAW'
-          secondary = 0
-          force_coefficients, correction_table = self.calculate_force_coefficients(motion, primary, secondary, absc1, absc2, icoty, uo, pmmcoefs)
+          tableType = 'DRIFT' if motion == 1 else 'YAW'
+          force_coefficients, correction_table = self.calculate_force_coefficients(motion, tableType,  absc1, absc2, icoty, uo, pmmcoefs)
           if icoty == 0:  # construct baseTables
               tables = {}
               for key, value in force_coefficients.items():
                   df = pd.DataFrame(index=value.keys(), data=value.values())
                   df.index.name = 'BETAD' if motion == 1 else 'GAMMA'
                   df = df.rename(columns={0: key})
-                  if key== 'X_HL' and primary == 'DRIFT':
+                  if key== 'X_HL' and tableType == 'DRIFT':
                     df.loc[-90] = df.loc[90.0] = 0.0
       # Change sign of all values where index np.abs(BETAD) > 170
                     df.loc[np.abs(df.index) >= 170.0, 'X_HL'] *= -1
@@ -464,8 +466,12 @@ class HullThumbs(Thumbs.Thumbs):
                     df.loc[ 45.0]   = 1.5* df.loc[-20.0]
                     df.loc[ 70.0]   = df.loc[-20.0]
                     df.loc[ 135.0]  = -1.5* df.loc[-20.0]                    
+                  if key=='X_HL' and tableType == 'YAW' :
+                    print('Can not see how this works in the fortan code but Y and X (gamma) seems to be zero so hardcoded here !!')
+                    df.loc[np.abs(df.index) == 90.0] = 0.0
                     
-                  tables[f'{key} = {primary}'] = df
+                    
+                  tables[f'{key} = {tableType}'] = df
                   
           else: # construct correction tables
               tables = {}
@@ -1334,6 +1340,7 @@ if __name__ == '__main__':
               -6.449616E-04, -7.491886E-04,  0.000000E+00]
 
   #print(baseTables['X_HL = YAW'].head())
+  fig,ax = plt.subplots()
   plt.plot(baseTables['X_HL = YAW'],'-*',label='X_HL(GAMMA)')
   plt.plot(SY1_gamma,SY1_X_HL,'-*',label='SY1_XHL(Gamma)')
   plt.legend()

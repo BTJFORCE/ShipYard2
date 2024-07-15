@@ -177,6 +177,10 @@ class TestHullThumbs(unittest.TestCase):
         # test getting drift tables 
         baseTables,correctionTables = self.hull_thumbs.getForceTables(pmmCoefs,'DRIFT')
         np.testing.assert_allclose(baseTables['X_HL = DRIFT'].loc[-135.0],-0.0016682163766285373,rtol=0.01)
+        # test getting YAW tables
+        baseTables,correctionTables = self.hull_thumbs.getForceTables(pmmCoefs,'YAW')
+        np.testing.assert_allclose(baseTables['X_HL = YAW'].loc[26.0],-7.491886E-04,rtol=0.001)
+        idum = 0
         pass
     def test_resistance(self):
         shallow = False
