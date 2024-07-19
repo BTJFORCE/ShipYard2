@@ -6,6 +6,7 @@ from scipy.constants import g
 from scipy.optimize import fmin_bfgs,minimize
 import json
 import os
+import glob
 
 import pandas as pd
 
@@ -85,7 +86,12 @@ class HullThumbs(Thumbs.Thumbs):
                       'YAW':{'X_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea},
                            'Y_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea},
                            'N_HL':{'WHRD2':self.rho/2.,'UR_Y':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
-                          }}
+                          },
+                      'YAW_DRIFT':{'X_HL':{'WHRD2':self.rho/2.,'UR_YD':1,'ALW':self.underWaterLateralArea},
+                           'Y_HL':{'WHRD2':self.rho/2.,'UR_YD':1,'ALW':self.underWaterLateralArea},
+                           'N_HL':{'WHRD2':self.rho/2.,'UR_YD':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
+                          }
+                      }
     print('!!! To save time during development we read acoef and bcoef from files !!!')
     #the dmimix calculate a and b coefficients for shallow water correction
     #it is time consuming and for debug purpose they are for now read from files
@@ -104,9 +110,9 @@ class HullThumbs(Thumbs.Thumbs):
   
   def RESIS(self,shallow,velocity):
     '''
-    This function calculates the resistance according to Hultrop Mennen , converted to python from 
+    This function calculates the resistance according to Holtrop Mennen , converted to python from 
     $/SimFlex Classic/src/lib/core/msdat/lib/thmb/resis.f
-    shallow: True -> shallow water resistance calculated else deeo
+    shallow: True -> shallow water resistance calculated else deep
     velocity: speed through water in m/s
     
     note: indirectly tested through test_resistance
@@ -366,7 +372,63 @@ class HullThumbs(Thumbs.Thumbs):
     for key in multiPlier.keys():
       factor *= multiPlier[key]
     return force*utot2/factor    
-     
+    
+  def yaw_drift_Tables(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
+      multipliers = self.MultiPliers[tableType]
+      force_coefficients = {key: {} for key in multipliers.keys()}
+      correction_table = {key: np.zeros((len(absc1), len(absc2))) if absc2 else None for key in multipliers.keys()}
+
+      for ixa1, betaDEG in enumerate(absc1):
+        betad = np.radians(betaDEG)
+        for ixa2,gammaDEG in enumerate(absc2):
+          gamma = np.radians(gammaDEG)
+          
+          pmmtyp = 1
+          SepPoint = self.SeparationPoint
+          coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
+
+          uoo = ucar
+          ucar = self.pmmcar(uoo, betad, coftyp)
+          tertiary = delta = heel = epsil = 0.0  
+
+          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+          speed_dict = self.hluref(udim, vdim, rdim, pdim)
+          # update the multipliers with speed values if they are available
+          multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}
+
+          toh = 0
+          uo = self.serviceSpeed
+          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+          F1 = fdimu2
+          print ('!!! Cant figure out the meaning of F1 and F2 !!!')
+          ucar = self.pmmcar(uoo, betad, coftyp)
+          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+          F2 = fdimu2
+          print ('!!!!!!!!!!!!!!! skipping YAW_DRIFT for now !!!!!!!!!!!!!!!!')  
+          return None,None
+          '''
+          forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
+          if icoty == 0: #BaseTable
+              for key, multiplier in multipliers.items():
+                  if key == 'K_HL':
+                    continue
+                  force_coefficients[key][dummy] = self.getForceCoefficient(multiplier, fdimu2[forceIndex[key]], utot2)
+          else: ## now we create a correction table
+              FBASE = fdimu2
+              for ix, toh in enumerate(absc2):
+                  if ix == 0:
+                      for key in correction_table.keys():
+                          correction_table[key][ixa1, ix] = 1.0
+                      continue
+                  fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+                  for key in correction_table.keys():
+                    if key == 'K_HL':
+                      continue
+                    correction_table[key][ixa1, ix] = fdimu2[forceIndex[key]] / FBASE[forceIndex[key]]
+          '''
+      return force_coefficients, correction_table    
+    
   def calculate_force_coefficients(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
       multipliers = self.MultiPliers[tableType]
       force_coefficients = {key: {} for key in multipliers.keys()}
@@ -380,6 +442,8 @@ class HullThumbs(Thumbs.Thumbs):
         elif tableType == 'YAW':
           betad = 0
           gamma = np.radians(val)
+          if val == 26:
+            idum = 0
           
         pmmtyp = 1
         SepPoint = self.SeparationPoint
@@ -443,42 +507,61 @@ class HullThumbs(Thumbs.Thumbs):
           if icoty == 0:  # construct baseTables
               tables = {}
               for key, value in force_coefficients.items():
-                  df = pd.DataFrame(index=value.keys(), data=value.values())
-                  df.index.name = 'BETAD' if motion == 1 else 'GAMMA'
-                  df = df.rename(columns={0: key})
-                  if key== 'X_HL' and tableType == 'DRIFT':
-                    df.loc[-90] = df.loc[90.0] = 0.0
-      # Change sign of all values where index np.abs(BETAD) > 170
-                    df.loc[np.abs(df.index) >= 170.0, 'X_HL'] *= -1
-                    # These comments and the following code transfered and translated from fortran code    
-                    #cbla    the next if block are made to make the X_HL for drift look right,
-                    #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
-                    #cbla    to get the value at 45 degree and make the table symmetrical. 
-                    #cbla    The 1.5 factor is taken from ship3005. 
-                      
-                    #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
-                    #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
-                    #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
-                    #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
-                    df.loc[-135.0]  = -1.5* df.loc[-20.0]
-                    df.loc[-70.0]   = df.loc[-20.0]
-                    df.loc[-45.0]   = 1.5* df.loc[-20.0]
-                    df.loc[ 45.0]   = 1.5* df.loc[-20.0]
-                    df.loc[ 70.0]   = df.loc[-20.0]
-                    df.loc[ 135.0]  = -1.5* df.loc[-20.0]                    
-                  if key=='X_HL' and tableType == 'YAW' :
-                    print('Can not see how this works in the fortan code but Y and X (gamma) seems to be zero so hardcoded here !!')
-                    df.loc[np.abs(df.index) == 90.0] = 0.0
+                df = pd.DataFrame(index=value.keys(), data=value.values())
+                df.index.name = 'BETAD' if motion == 1 else 'GAMMA'
+                df = df.rename(columns={0: key})
+                if key== 'X_HL' and tableType == 'DRIFT':
+                  df.loc[-90] = df.loc[90.0] = 0.0
+                  # Change sign of all values where index np.abs(BETAD) > 170
+                  df.loc[np.abs(df.index) >= 170.0, 'X_HL'] *= -1
+                  # These comments and the following code transfered and translated from fortran code    
+                  #cbla    the next if block are made to make the X_HL for drift look right,
+                  #cbla    meaning that we multiply the value at 20 degree driftangle with 1.5 
+                  #cbla    to get the value at 45 degree and make the table symmetrical. 
+                  #cbla    The 1.5 factor is taken from ship3005. 
+                  #index135 = np.where(np.abs(df['BETAD'].values) == 135.0)   
+                  #index70 =  np.where(np.abs(df['BETAD'].values) ==  70.0) 
+                  #index45 =  np.where(np.abs(df['BETAD'].values) ==  45.0)     
+                  #index20 =  np.where(np.abs(df['BETAD'].values) ==  20.0) 
+                  df.loc[-135.0]  = -1.5* df.loc[-20.0]
+                  df.loc[-70.0]   = df.loc[-20.0]
+                  df.loc[-45.0]   = 1.5* df.loc[-20.0]
+                  df.loc[ 45.0]   = 1.5* df.loc[-20.0]
+                  df.loc[ 70.0]   = df.loc[-20.0]
+                  df.loc[ 135.0]  = -1.5* df.loc[-20.0]                    
+                if key=='X_HL' and tableType == 'YAW' :
+                  print('Can not see how this works in the fortan code but Y and X (gamma) seems to be zero so hardcoded here !!')
+                  df.loc[np.abs(df.index) == 90.0] = 0.0
                     
-                    
-                  tables[f'{key} = {tableType}'] = df
-                  
+                tables[f'{key} = {tableType}'] = df       
           else: # construct correction tables
               tables = {}
               for key in force_coefficients.keys():
                   df = pd.DataFrame(correction_table[key], index=absc1, columns=absc2)
                   tables[f'{key}(BETAD,TOH)' if motion == 1 else f'{key}(GAMMA,TOH)'] = df
-          return tables
+      elif motion == 3:
+        for ixa1, val in enumerate(absc1):
+          
+          pmmtyp = 1
+          SepPoint = self.SeparationPoint
+          coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
+          uoo = ucar
+          ucar = self.pmmcar(uoo, betad, coftyp)
+          tertiary = delta = heel = epsil = 0.0  
+
+          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+          speed_dict = self.hluref(udim, vdim, rdim, pdim)
+          # update the multipliers with speed values if they are available
+          multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}
+
+          toh = 0
+          uo = self.serviceSpeed
+          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)        
+          F1 = fdimu2
+          idum = 0
+        
+        
+      return tables
 
   
 
@@ -691,6 +774,10 @@ class HullThumbs(Thumbs.Thumbs):
 
   def getSquatAP(self):
     return self.SquatAP
+
+
+        
+    return tables
 
   def addedMassTOH(self,tableName):
     '''
@@ -1106,127 +1193,71 @@ class HullThumbs(Thumbs.Thumbs):
       
       
       
-  def pmmfor(self,pmmCoefs,coftyp,uo,udim,vdim,rdim,qdim,pdim,ddim,toh):
-    '''
-    this function calculates the forces on the hull using the PMM coefficient/hydrodynamic derivatives
-    the function is translate to python by BTJ originally part of shipYard1 see tfs
-    $/SimFlex Classic/src/lib/core/msdat/lib/pmm/pmmfor.f
-    '''
-    acoef = self.acoef
-    bcoef = self.bcoef
-    fdim=np.array([0.,0.,0.])
-    fdimu2=np.array([0.,0.,0.])
-    ## SKIPPING D,Q,P derivatives as we dont have them
-    xderivatives=['X0','XU','XUU','XUUU','XV','XVV','XR','XRR','XVR','XUDOT','XRDOT','XUIUI']
-    yderivatives=['Y0','Y0U','YUU','YV','YVV','YVIVI','YVVV','YVU','YR','YRR','YRIRI','YRRR','YRIVI','YRVV','YVIRI','YVRR','YVDOT','YRDOT']
-    nderivatives=['N0','N0U','NUU','NV','NVV','NVIVI','NVVV','NVU','NR','NRR','NRIRI','NRRR','NRIVI','NRVV','NVIRI','NVRR','NVDOT','NRDOT ']
-    lpp = self.Lpp
-    
-    if coftyp == 1:
-      utot2 = udim*udim + vdim*vdim
-      utot  = np.sqrt(utot2)
-      U   = (udim - uo)/utot
-      V   = vdim/utot
-      R   = rdim/(utot/lpp)
-      Q  = qdim
-      P   = pdim/(utot/lpp)
-      D   = ddim
-      usign = 1.0
-    else:
-      utot2 = 1.
-      utot  = 1.0
-      U   = udim
-      V   = vdim
-      R   = rdim*lpp
-      Q   = qdim
-      P   = pdim*lpp
-      D  = ddim
-#     if vdim and udim is zero we jump over the next because when gamma is -90 or 90
-#     this would lead to not a number (NAN) for BETAMSMFQ, which are used in the XVVSPEC coef.
-      if (np.sqrt(vdim**2+udim**2) < 0.000001) :
-        usign = np.sign(U)
-        '''
-        if U == 0:
-          usign = 0
-        elif U > 0:
-          usign = 1
-        elif U < 0:
-          usign = -1
-        '''
-      else:
-        BETAMSMFQ=np.sign(udim)*(-np.arcsin(vdim/np.sqrt(vdim**2+udim**2)))
-        usign = np.sign(U)
-        pass
-    # X --- force
-    xcoeff=np.array([])
-    speedvector=np.array([])
-    TOHCorrection=np.array([])
-    #inserting coefs and speed in arrays so we can do simple array multiplication to calculate force
-    # check for key in dict needs to be added
-    for val in xderivatives:
-      if val in pmmCoefs.keys():
-        if 'DOT' in val:
-          continue  # in the fortran PMMFOR no DOT derivatives appears
-        xcoeff=np.append(xcoeff,pmmCoefs[val])
-        speedvector=np.append(speedvector,self.speedfactor(val,U,V,R))
-        if val in acoef.keys():
-          a = acoef[val]
-          b = bcoef[val]
+  def calculate_PMM_force(self, derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh):
+    coeff = np.array([])
+    speedvector = np.array([])
+    TOHCorrection = np.array([])
+    for val in derivatives:
+        if val in pmmCoefs.keys() and 'DOT' not in val:
+            coeff = np.append(coeff, pmmCoefs[val])
+            speedvector = np.append(speedvector, self.speedfactor(val, U, V, R))
+            a = acoef[val] if val in acoef.keys() else 0
+            b = bcoef[val] if val in bcoef.keys() else 1
+            TOHCorrection = np.append(TOHCorrection, (1 + a * toh**b))
+    return np.sum(coeff * TOHCorrection * speedvector)
+
+  def pmmfor(self, pmmCoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh):
+      acoef = self.acoef
+      bcoef = self.bcoef
+      fdim = np.array([0., 0., 0.])
+      fdimu2 = np.array([0., 0., 0.])
+      lpp = self.Lpp
+      utot2 = udim*udim + vdim*vdim if coftyp == 1 else 1.
+      utot = np.sqrt(utot2)
+      U = (udim - uo)/utot if coftyp == 1 else udim
+      V = vdim/utot if coftyp == 1 else vdim
+      R = rdim/(utot/lpp) if coftyp == 1 else rdim*lpp
+
+      derivatives = ['X0', 'XU', 'XUU', 'XUUU', 'XV', 'XVV', 'XR', 'XRR', 'XVR', 'XUDOT', 'XRDOT', 'XUIUI']
+      fdimu2[0] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**2
+      fdim[0] = fdimu2[0]*utot2
+
+      derivatives = ['Y0', 'Y0U', 'YUU', 'YV', 'YVV', 'YVIVI', 'YVVV', 'YVU', 'YR', 'YRR', 'YRIRI', 'YRRR', 'YRIVI', 'YRVV', 'YVIRI', 'YVRR', 'YVDOT', 'YRDOT']
+      fdimu2[1] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**2
+      fdim[1] = fdimu2[1]*utot2
+
+      derivatives = ['N0', 'N0U', 'NUU', 'NV', 'NVV', 'NVIVI', 'NVVV', 'NVU', 'NR', 'NRR', 'NRIRI', 'NRRR', 'NRIVI', 'NRVV', 'NVIRI', 'NVRR', 'NVDOT', 'NRDOT ']
+      fdimu2[2] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**3
+      fdim[2] = fdimu2[2]*utot2
+
+      return fdim, fdimu2, utot2
+   
+  
+  def getRollHeelTables(self):
+    tables = {name: {} for name in ['ROLL', 'DRIFT_BETAD', 'DRIFT_HEEL', 'YAW_DRIFT', 'YAW_HEEL', 'YAW']}
+    files = glob.glob(r"h:\GitRepos\ShipYard2\data\hull\*.dat")
+
+    for fil in files:
+        filename = os.path.basename(fil)
+        key = filename[-8:-4]  
+        tableName = filename[:-9]
+
+        if 'ROLL' in fil:
+            index_col = 'EPSI'
+        elif tableName in ['DRIFT_HEEL', 'DRIFT_BETAD', 'YAW_DRIFT']:
+            index_col = 'BETAD'
+        elif tableName.startswith('YAW'):
+            index_col = 'GAMMA'
         else:
-          a = 0
-          b = 1
-        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))
-        
-    fdimu2[0]= np.sum(xcoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
-    fdim[0] = fdimu2[0]*utot2
-    # Y-force
-    ycoeff=np.array([])
-    speedvector=np.array([])
-    TOHCorrection=np.array([])
-    for val in yderivatives:
-      if val in pmmCoefs.keys():
-        if 'DOT' in val:
-          continue  # in the fortran PMMFOR no DOT derivatives appears
-        ycoeff=np.append(ycoeff,pmmCoefs[val])
-        speedvector=np.append(speedvector,self.speedfactor(val,U,V,R)) 
-        if val in acoef.keys():
-          a = acoef[val]
-          b = bcoef[val]
-        else:
-          a = 0
-          b = 1
-        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b))       
+            continue
+
+        df = pd.read_csv(fil, header=0, sep='\s+', index_col=index_col)
+        tables[tableName][key] = df
+
+    return tables
+  
     
-    fdimu2[1]= np.sum(ycoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**2
-    fdim[1] = fdimu2[1]*utot2    
-    # N-moment
-    ncoeff=np.array([])
-    speedvector=np.array([])
-    TOHCorrection=np.array([])
-    for val in nderivatives:
-      if val in pmmCoefs.keys():
-        if 'DOT' in val:
-          continue  # in the fortran PMMFOR not DOT derivatives appears
-        ncoeff=np.append(ncoeff,pmmCoefs[val])
-        speedfactor = self.speedfactor(val,U,V,R)
-        speedvector=np.append(speedvector,speedfactor) 
-        # comment from fortran code
-        #It is believed that N must change its sign for ship going astern
-        #Therefore, USIGN is multiplied to the NvIvI
-        if 'VIVI' in val:
-          speedfactor *= usign
-        if val in acoef.keys():
-          a = acoef[val]
-          b = bcoef[val]
-        else:
-          a = 0
-          b = 1            
-        TOHCorrection=np.append(TOHCorrection,(1+ a * toh**b)*speedfactor)        
-    
-    fdimu2[2]= np.sum(ncoeff * TOHCorrection * speedvector) * 0.5 * self.rho * lpp**3
-    fdim[2] = fdimu2[2]*utot2      
-    
-    return fdim,fdimu2,utot2      
+
         
         
 # %%
@@ -1251,7 +1282,7 @@ if __name__ == '__main__':
   shipDatadict['blockCoefficient'] = 0.704661757
   shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
   shipDatadict['wettedSurface'] = 0.7801584*(shipDatadict['Lpp'] *(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
-  shipDatadict['underWaterLateralArea'] = 0.9124 * shipDatadict['Lpp'] * shipDatadict['meanDraft']
+  shipDatadict['underWaterLateralArea'] =  0.9843655* shipDatadict['Lpp'] * shipDatadict['meanDraft']
  
   shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
   shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
@@ -1350,8 +1381,17 @@ if __name__ == '__main__':
   plt.show()
   pass
 
-    
+# %%
+  
+  tables = hull_Thumbs.getRollHeelTables()
+  fig,ax = plt.subplots()
+  tables['ROLL']['Y_HL'].plot()
+  plt.title('ROLL')
+  plt.grid()
+  idum = 0
 
   # %%
+df = pd.read_csv("H:\GitRepos\ShipYard2\data\hull\YAW_DRIFT_K_HL.dat",header=0,sep='\s+')
+df.set_index('BETAD',inplace=True)
 
 # %%

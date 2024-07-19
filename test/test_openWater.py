@@ -15,11 +15,35 @@ import KtKq
 from HullThumbs import HullThumbs
 
 # %%
+
+shipDatadict={}
+shipDatadict['shipnr'] = 3949
+shipDatadict['Lpp'] = 340.5
+shipDatadict['Beam'] = 53.5
+
+shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['Lpp'] * shipDatadict['Beam']
+shipDatadict['propellerType'] ='FP'
+shipDatadict['PropellerPitch'] = 0.71505
+shipDatadict['displacement'] =218220.0
+shipDatadict['propellerDiameter'] = 7.0
+shipDatadict['draftAft']  = 17.
+shipDatadict['draftFore'] = 17.0
+shipDatadict['blockCoefficient'] = 0.704661757
+shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
+shipDatadict['wettedSurface'] = 0.7801584*(shipDatadict['Lpp'] *(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
+shipDatadict['underWaterLateralArea'] = 0.9124 * shipDatadict['Lpp'] * shipDatadict['meanDraft']
+
+shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
+shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
+shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['Lpp'],shipDatadict['Lpp']])
+shipDatadict['SeparationPoint'] = 45.0
+
 class KtKqMethods(unittest.TestCase):
-    KtKqObj = KtKq.KtKq(3949)
+
+    KtKqObj = KtKq.KtKq(shipDatadict)
     @classmethod
     def setUpClass(cls):
-        cls._KtKqObj = KtKq.KtKq(3949)
+        cls._KtKqObj = KtKq.KtKq(shipDatadict)
 
     @classmethod    
     def tearDownClass(cls):
@@ -75,7 +99,7 @@ class TestHullThumbs(unittest.TestCase):
 
     def setUp(self):
         # Initialize the HullThumbs object before each test method
-        self.hull_thumbs = HullThumbs(shipnr=3949, propellerDiameter=5.0)
+        self.hull_thumbs = HullThumbs(shipDatadict)
 
     def test_linear_damping_initialization(self):
         # Test the linearDamping method

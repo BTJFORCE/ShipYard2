@@ -112,8 +112,8 @@ class wake(pThumbs.Thumbs):
     -0.30, -0.50, -0.50, -0.50,
     0.61, 0.80, 0.90, 2.00
 ]
-    def __init__(self,shipnr,propellerDiameter=None):
-        super().__init__(shipnr,propellerDiameter=None)
+    def __init__(self,shipDatadict):
+        super().__init__(shipDatadict)
 
     def R1(self):
         L9 = self.lengthWaterLine 
@@ -284,13 +284,32 @@ class wake(pThumbs.Thumbs):
 
 
 if __name__ == '__main__':
-    propellerDiameter = 7
-    nProps = 1
-    ship_nr = 3949
-    aWake = wake(ship_nr,propellerDiameter)
+    shipDatadict={}
+    shipDatadict['shipnr'] = 3949
+    shipDatadict['Lpp'] = 340.5
+    shipDatadict['Beam'] = 53.5
+
+    shipDatadict['waterPlaneArea'] = 0.893628117 * shipDatadict['Lpp'] * shipDatadict['Beam']
+    shipDatadict['propellerType'] ='FP'
+    shipDatadict['PropellerPitch'] = 0.71505
+    shipDatadict['displacement'] =218220.0
+    shipDatadict['propellerDiameter'] = 7.0
+    shipDatadict['draftAft']  = 17.
+    shipDatadict['draftFore'] = 17.0
+    shipDatadict['blockCoefficient'] = 0.704661757
+    shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
+    shipDatadict['wettedSurface'] = 0.7801584*(shipDatadict['Lpp'] *(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
+    shipDatadict['underWaterLateralArea'] = 0.9124 * shipDatadict['Lpp'] * shipDatadict['meanDraft']
+
+    shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
+    shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
+    shipDatadict['GyrationArms'] = np.array([0.4, 0.25, 0.25]) * np.array([shipDatadict['Beam'],shipDatadict['Lpp'],shipDatadict['Lpp']])
+    shipDatadict['SeparationPoint'] = 45.0    
+
+    aWake = wake(shipDatadict)
     wake  = aWake.wakeCalculation()
     thrde = aWake.thrustDeduction()
-    print (f" Wake for D ={propellerDiameter} = {wake}")
+    print (f" Wake for D ={shipDatadict['propellerDiameter']} = {wake}")
     aWake.wakeTable()
     #print(f" Thrust deduction for D = {propellerDiameter}  , {thrde}")
     #aWake.thrustDeductionTable()

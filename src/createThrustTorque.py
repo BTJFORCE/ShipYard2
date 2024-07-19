@@ -214,7 +214,7 @@ if __name__ == '__main__':
     df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'FP')
     #print(df)
     #df = aThrustTorqueData.ThrustTorque(ThrustData,AeA0,PD,'CP')
-    df.head()
+    print(df.head())
     pass
 
     

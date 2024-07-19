@@ -4,26 +4,5 @@
 			"path": "."
 		}
 	],
-	"settings": {
-		"python.unitTest.unittestArgs": [
-			"-p",
-			"*_test.py",
-			"-v",
-			"-s",
-			"./tests"
-		],
-		"files.exclude": {
-			"**/.git": true,
-			"**/.svn": true,
-			"**/.hg": true,
-			"**/CVS": true,
-			"**/SY2": true,
-			"**/.DS_Store": true,
-			"**/*.pyc": {
-				"when": "$(basename).py"
-			},
-			"**/__pycache__": true,
-			"**/__pytest_cache__": true
-		},
-	}
+	"settings": {}
 }

@@ -32,7 +32,7 @@ shipDatadict['draftAft']  = 17.
 shipDatadict['draftFore'] = 17.0
 shipDatadict['meanDraft'] = (shipDatadict['draftAft'] + shipDatadict['draftFore'] )/2.0
 shipDatadict['wettedSurface'] = .794059157 *(shipDatadict['Lpp']*(2*shipDatadict['meanDraft']+shipDatadict['Beam']))
-shipDatadict['underWaterLateralArea'] = shipDatadict['Lpp']*shipDatadict['meanDraft']*0.984331001                         
+shipDatadict['underWaterLateralArea'] = shipDatadict['Lpp']*shipDatadict['meanDraft']*0.9843655                      
 shipDatadict['blockCoefficient'] = 0.704661757
 shipDatadict['CenterofGravity'] = np.array([-0.002290749, 0, -0.415058824]) * np.array([shipDatadict['Lpp'] ,shipDatadict['Beam'],shipDatadict['meanDraft']])
 shipDatadict['verticalCenterOfBoyancy'] = 0.453647058824 * shipDatadict['meanDraft'] 
@@ -139,7 +139,7 @@ class TestHullThumbs(unittest.TestCase):
     
     def test_dmimix(self):
         a,b = self.hull_thumbs.dmimix()
-        np.testing.assert_allclose(a['XUDOT'],6.014,rtol=0.1)
+        np.testing.assert_allclose(a['XUDOT'],5.872,rtol=0.001)
         #print(a)
         pass
     def test_pmmmot(self):
@@ -168,6 +168,38 @@ class TestHullThumbs(unittest.TestCase):
         assert absc2 is None, "absc2 should be none"
         assert len(absc1)==31,"absc1 should have length 31"
         pass
+    def test_calculate_force_coefficients(self):
+        motion = 2 # GAMMA table
+        tableType = 'YAW'
+        icoty = 0 # Base model Beta
+        uo = self.hull_thumbs.serviceSpeed
+        with open(r"H:\GitRepos\ShipYard2\data\PMMdata\3949NeuPMMDe_005_001.txt",'r') as f:
+            pmmCoefs = {}
+            for line in f:
+                splt = line.split()
+                pmmCoefs[splt[0]] = float(splt[1])/1.0E5           
+        absc1, absc2 = self.hull_thumbs.defval(motion, icoty)
+        force_coefficients, correction_table = self.hull_thumbs.calculate_force_coefficients(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
+        print ("test_calculate_force_coefficients MISSING assert")
+
+    def test_yaw_drift_Tables(self):
+        with open(r"H:\GitRepos\ShipYard2\data\PMMdata\3949NeuPMMDe_005_001.txt",'r') as f:
+            pmmCoefs = {}
+            for line in f:
+                splt = line.split()
+                pmmCoefs[splt[0]] = float(splt[1])/1.0E5   
+        motion = 3
+        icoty = 0                
+        uo = self.hull_thumbs.serviceSpeed
+        ipmms = 1
+        tableType ='YAW_DRIFT'
+        absc1,absc2 = self.hull_thumbs.defval(motion,icoty)
+        tables = self.hull_thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
+        idum = 0
+        pass
+    def test_getRollHeelTables(self):
+        tables = self.hull_thumbs.getRollHeelTables()
+        idum = 0
     def test_getForceTables(self):
         with open(r"H:\GitRepos\ShipYard2\data\PMMdata\3949NeuPMMDe_005_001.txt",'r') as f:
             pmmCoefs = {}
