@@ -4,6 +4,7 @@
 import numpy as np
 from scipy.constants import g
 from scipy.optimize import fmin_bfgs,minimize
+from scipy.interpolate import interp1d
 import json
 import os
 import glob
@@ -323,7 +324,231 @@ class HullThumbs(Thumbs.Thumbs):
     return df
     
 
-  
+  def shallowWaterResistance(self):
+    ''' 
+    translated from $/SimFlex Classic/src/lib/core/msdat/lib/thmb/hlshrs.f
+    the originalname may be translated to hull shallow resistanc schlicting
+    
+    '''
+    XLPP = self.Lpp
+    XBEAM = self.beam
+    XDRAFP = self.draftFore
+    XDRAAP = self.draftAft
+    XWETSU = self.wettedSurface
+    XMIDCO = self.midshipSection
+    V5 = self.serviceSpeed
+    XWAVIS = 1.191e-6
+    xwaden = self.rho
+    DRAFTM = self.meanDraft
+    AX = XBEAM * DRAFTM * XMIDCO    # Mid ship area
+    NAHEAINT = 14
+    NASTINT = 8
+    TOHARR = np.array([0.000, 0.400,0.667,0.833,1.000])
+    ITOH = len(TOHARR)
+    MAXSPEED = 1.4*V5
+    MINSPEED = -1.0*V5
+    velnegative = np.linspace(MINSPEED,-1.0E-2,NASTINT,endpoint=True)
+    #dont include zero in the velocities
+    velpositive = np.linspace(1.0E-2,MAXSPEED,NAHEAINT-1,endpoint=True)
+    velocities = np.concatenate((velnegative, velpositive)) 
+    MFRU = len(velocities)
+    FRUDEP = np.array([ vel/np.sqrt(g*XLPP) for vel in velocities])
+    FRUNOH = np.zeros(len(FRUDEP))
+    SHAFRU = np.zeros(len(FRUDEP))
+    VFINAL = np.zeros(len(FRUDEP))
+    CTSHAL = np.zeros(len(FRUDEP))
+    CTSCTD = np.zeros(len(FRUDEP))
+    CT = np.zeros(ITOH)
+    CRITSP = np.zeros(ITOH)
+    FRU = np.zeros(MFRU)
+    CTS = np.zeros(MFRU)
+    CTSH1  =  np.zeros(MFRU)
+    CTS1   =  np.zeros(MFRU)
+    FRU1    =  np.zeros(MFRU)
+    CTSH2  =  np.zeros(MFRU)
+    CTS2   =  np.zeros(MFRU)
+    FRU2    =  np.zeros(MFRU)
+    CTSH3  =  np.zeros(MFRU)
+    CTS3   =  np.zeros(MFRU)
+    FRU3    =  np.zeros(MFRU)
+    CTSH4  =  np.zeros(MFRU)
+    CTS4   =  np.zeros(MFRU)
+    FRU4    =  np.zeros(MFRU)
+    CTSH5  =  np.zeros(MFRU)
+    CTS5   =  np.zeros(MFRU)
+    FRU5    =  np.zeros(MFRU)              
+    IFNO = len(FRUDEP)  
+    ICRIT = 0
+    FTEMP = np.zeros((IFNO,ITOH))
+
+    SQAXOH =[ 0.0, 0.1, 0.2, 0.3 , 0.4 , 0.5 , 0.6 , 0.7 , 0.8 ,0.9 , 1.0 , 1.1 ,   1.2 ,   1.3 ,
+              1.4 ,1.5 ,1.6 ,1.7 , 1.8 , 1.9 , 4.0 ]
+    VHVI = [1.0, 1.0, 0.999, 0.995, 0.987, 0.977, 0.962, 0.946, 0.926, 0.905, 0.883, 0.858, 
+        0.830, 0.801, 0.7925, 0.743, 0.710, 0.6795, 0.644, 0.608, 0.155]
+        
+    RINTP_SQAXOH = interp1d(SQAXOH,VHVI)    
+    shallow = False
+    CTOTD = self.RDHOLTROP(shallow)
+    CTOTD = CTOTD.iloc[[i for i in range(len(CTOTD)) if i != NASTINT]]
+    
+    RINTP_FRUDEP = interp1d(FRUDEP,CTOTD['X_HL'].values)
+
+
+#
+#---- CALCULATION OF SHALLOW WATER RESISTANCE AND CT-H/CT-INF ----
+#
+    for L in range(len(CTOTD)):
+      for J in range(len(TOHARR)):
+        if J == 1:
+          idum = 0
+        VSPEED = velocities[L]
+        if VSPEED  < 0.0 :
+          REYNOM = -VSPEED * XLPP/XWAVIS
+        else:
+          REYNOM = VSPEED * XLPP/XWAVIS
+        
+        CFDEEP = -np.sign(FRUDEP[L])*0.075/(np.log10(REYNOM) - 2.0)**2
+        DELTAC = CTOTD.iloc[L]['X_HL'] - CFDEEP
+        if TOHARR[J] == 0.0:
+           TOHARR[J] = 1.E-05
+        DEPTH  = DRAFTM / TOHARR[J]
+
+        if (L == 0) : 
+          CRITSP[J] = 0.75*np.sqrt(9.81*DEPTH)*3600.0/1852.0 
+
+        SQAXH = np.sqrt(AX)/DEPTH
+        #C
+        #C--- Vi/Vu IS CALCULATED  FOR ACTUAL SPEED ---
+        #C
+        XVIVU = np.sqrt(np.tanh(9.81*DEPTH/(VSPEED**2)))    
+        #
+        #--- CFi AND CTi ARE CALCULATED AT SPEED Vi ---
+        #
+        FRUNOI = FRUDEP[L] * XVIVU
+        VSPED = FRUNOI * np.sqrt(9.81 * XLPP)
+        if (FRUDEP[L] < 0.0) :
+          REYNO1 = -VSPED * XLPP/XWAVIS
+        else:
+          REYNO1 =  VSPED * XLPP/XWAVIS
+        
+        CFI = -np.sign(FRUDEP[L])*0.075/(np.log10(REYNO1) - 2.0)**2
+        CTI = CFI + DELTAC*(VSPEED**2/VSPED**2)  
+        #C
+        #C---- LOOKUP IN VH/VI TABLE FOR SQRT(AX)/H ---
+        #C
+        FRUSHA = RINTP_SQAXOH(SQAXH)
+
+        FRUNOH[L] = FRUNOI * FRUSHA
+        VSPED1 = FRUNOH[L] * np.sqrt(9.81 * XLPP)
+        V1 = VSPED1 * (3600.0/1852.0)
+        #C
+        #C--- CT SHALLOW IS CALCULATED ON BASE OF CTi AND Vi/Vh ---
+        #C
+        CTSHAL[J] = CTI * (VSPED**2/VSPED1**2)
+        #C
+        #C---- LOOKUP FOR CTOTD IN CTOTD TABLE FOR FN IN SHALLOW WATER
+        #C
+        CTFRUH = RINTP_FRUDEP(FRUNOH[L])
+
+        #C
+        #C--- CT-H/CT-INF ARE CALCULATED ---
+        #C
+        CTSCTD[J] = CTSHAL[J]/CTFRUH
+        if (J == 0) :
+          CTSH1[L]  = CTSHAL[J]*1000.0
+          CTS1[L]   = 1.0000 #CTSCTD[J]
+          FRU1[L]   = FRUNOH[L]
+
+        if (J == 1) :
+          CTSH2[L]  = CTSHAL[J]*1000.0
+          CTS2[L]   = CTSCTD[J]
+          FRU2[L]   = FRUNOH[L]
+      
+        if (J == 2) :
+          CTSH3[L]  = CTSHAL[J]*1000.0
+          CTS3[L]   = CTSCTD[J]
+          FRU3[L]   = FRUNOH[L]
+
+        if (J == 3) :
+          CTSH4[L]  = CTSHAL[J]*1000.0
+          CTS4[L]   = CTSCTD[J]
+          FRU4[L]   = FRUNOH[L]
+
+        if (J == 4) :
+          CTSH5[L]  = CTSHAL[J]*1000.0
+          CTS5[L]   = CTSCTD[J]
+          FRU5[L]   = FRUNOH[L]
+       
+        #C
+        #C--- FN AND SPEED FOR SHALLOW ARE SAVED FOR FIRST TOH ---
+        #C
+        if (J == 0) :
+          SHAFRU[L] = FRUNOH[L]
+          VFINAL[L] = V1
+       
+        #C
+        #C--- FN AND CTS ARE TRANSFERED TO AN WORKING ARRAY TO BE USED IN FINDING
+        #C    CTS FOR THE ACTUAL FN.
+        #C
+    for K1 in range(IFNO):
+      for K2 in range(ITOH):
+        if (K2 == 0) : 
+          for I in range(MFRU):
+            FRU[I] = FRU1[I]
+            CTS[I] = CTS1[I]
+
+        if (K2 == 1) : 
+          for I in range(MFRU): 
+            FRU[I] = FRU2[I]
+            CTS[I] = CTS2[I]
+
+        if (K2 == 2) : 
+          for I in range(MFRU):  
+            FRU[I] = FRU3[I]
+            CTS[I] = CTS3[I]
+
+        if (K2 == 3) : 
+          for I in range(MFRU):
+            FRU[I] = FRU4[I]
+            CTS[I] = CTS4[I]
+        if (K2 == 4) : 
+          for I in range(MFRU):  
+            FRU[I] = FRU5[I]
+            CTS[I] = CTS5[I]
+     
+        SHAFU_RINTP = interp1d(FRU,CTS)
+        if SHAFRU[K1] < FRU[0]:
+          CT[K2] = CTS[0]
+        elif SHAFRU[K1] > FRU[IFNO-1]:
+          print('NOT sure how to do this correct !!!')
+          CT[K2] =SHAFU_RINTP(FRU[IFNO-1])
+        else:
+          CT[K2] =SHAFU_RINTP(SHAFRU[K1])
+
+        #C
+        #C--- CHECK FOR SPEED NOT EXCEEDS .75 TIMES CRITICAL SPEED --
+        #C
+        VS1 = np.abs(SHAFRU[K1]) * np.sqrt(9.81 * XLPP)
+        if ((VS1*3600.0/1852.0) > CRITSP[K2]) :
+          ICRIT = ICRIT + 1
+        #C jbp The values in the critical range are now "adjusted", before they were zero 
+          if (CT[K2]  > 5.0 ) :
+            CT[K2] = 5.0 + 0.1*(CT[K2]-5.0)
+
+        #C
+        #C--- CTH/CTINF ARE WRITTEN TO A TABEL FOR SAME FN IN A ROW ---
+        #C  
+      #END K2 LOOP fil the row in FTEMP
+      for ix in range(ITOH):
+        FTEMP[K1,ix]= CT[ix]
+      
+      
+
+      if ( ICRIT !=  0 ) :
+        print(f'<Critical speed exceeded  {ICRIT} times>')
+    df = pd.DataFrame(FTEMP,columns=TOHARR)
+    return df
+    
   def pmmmot(self,ucar,betad,gamma,delta,heel,epsil):
     '''
     BTJ: think the pmmmot is short for pmm motion
@@ -1198,12 +1423,18 @@ class HullThumbs(Thumbs.Thumbs):
     speedvector = np.array([])
     TOHCorrection = np.array([])
     for val in derivatives:
-        if val in pmmCoefs.keys() and 'DOT' not in val:
-            coeff = np.append(coeff, pmmCoefs[val])
-            speedvector = np.append(speedvector, self.speedfactor(val, U, V, R))
-            a = acoef[val] if val in acoef.keys() else 0
-            b = bcoef[val] if val in bcoef.keys() else 1
-            TOHCorrection = np.append(TOHCorrection, (1 + a * toh**b))
+      if val in pmmCoefs.keys() and 'DOT' not in val:
+        if 'VIVI' in val:
+          sfactor = self.speedfactor(val, U, V, R)
+          sfactor *= np.sign(U)    
+          speedvector = np.append(speedvector, sfactor)
+        else:       
+          speedvector = np.append(speedvector, self.speedfactor(val, U, V, R))   
+           
+        coeff = np.append(coeff, pmmCoefs[val])
+        a = acoef[val] if val in acoef.keys() else 0
+        b = bcoef[val] if val in bcoef.keys() else 1
+        TOHCorrection = np.append(TOHCorrection, (1 + a * toh**b))
     return np.sum(coeff * TOHCorrection * speedvector)
 
   def pmmfor(self, pmmCoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh):
@@ -1322,6 +1553,9 @@ if __name__ == '__main__':
   plt.show()
   idum = 0
   pass
+# %%
+  shallow = True
+  resistanceTable = hull_Thumbs.RDHOLTROP(shallow)
 # %%
   
   # !!! dmimix takes a bit of time !!!

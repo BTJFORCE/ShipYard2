@@ -219,6 +219,10 @@ class TestHullThumbs(unittest.TestCase):
         resistanceTable = self.hull_thumbs.RDHOLTROP(shallow)
         np.testing.assert_allclose(resistanceTable.iloc[0][0],0.0020987559933257744,rtol=0.001)
         pass
+    def test_shallowWaterResistance(self):
+        shallowCorrection = self.hull_thumbs.shallowWaterResistance()
+        idum = 0
+        pass
     
 
 
