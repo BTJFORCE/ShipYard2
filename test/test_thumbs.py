@@ -194,8 +194,9 @@ class TestHullThumbs(unittest.TestCase):
         ipmms = 1
         tableType ='YAW_DRIFT'
         absc1,absc2 = self.hull_thumbs.defval(motion,icoty)
-        tables = self.hull_thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
-        idum = 0
+        tables,correctionTables = self.hull_thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
+        np.testing.assert_allclose(tables['X_HL'].loc[5.0][25.0],-0.0067560576097454,rtol=0.001)
+        
         pass
     def test_getRollHeelTables(self):
         tables = self.hull_thumbs.getRollHeelTables()
@@ -221,7 +222,7 @@ class TestHullThumbs(unittest.TestCase):
         pass
     def test_shallowWaterResistance(self):
         shallowCorrection = self.hull_thumbs.shallowWaterResistance()
-        idum = 0
+        np.testing.assert_allclose(shallowCorrection.iloc[-1,-1],5.043079,rtol=0.001)
         pass
     
 

@@ -93,6 +93,7 @@ class HullThumbs(Thumbs.Thumbs):
                            'N_HL':{'WHRD2':self.rho/2.,'UR_YD':1,'ALW':self.underWaterLateralArea,'LPP':self.Lpp}
                           }
                       }
+    self.forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
     print('!!! To save time during development we read acoef and bcoef from files !!!')
     #the dmimix calculate a and b coefficients for shallow water correction
     #it is time consuming and for debug purpose they are for now read from files
@@ -322,12 +323,13 @@ class HullThumbs(Thumbs.Thumbs):
     df.index.name = 'FN'
     df = df.rename(columns={0:'X_HL'})
     return df
-    
 
   def shallowWaterResistance(self):
     ''' 
     translated from $/SimFlex Classic/src/lib/core/msdat/lib/thmb/hlshrs.f
     the originalname may be translated to hull shallow resistanc schlicting
+    The code is kept close to the origanl implementation even though it seems there is a potential for optimizing the code
+    but i works so have used time to butify the code BTJ/20240725
     
     '''
     XLPP = self.Lpp
@@ -544,10 +546,12 @@ class HullThumbs(Thumbs.Thumbs):
       
       
 
-      if ( ICRIT !=  0 ) :
-        print(f'<Critical speed exceeded  {ICRIT} times>')
+      #if ( ICRIT !=  0 ) :
+      #  print(f'<Critical speed exceeded  {ICRIT} times>')
     df = pd.DataFrame(FTEMP,columns=TOHARR)
+    df.index = FRUDEP
     return df
+
     
   def pmmmot(self,ucar,betad,gamma,delta,heel,epsil):
     '''
@@ -599,66 +603,61 @@ class HullThumbs(Thumbs.Thumbs):
     return force*utot2/factor    
     
   def yaw_drift_Tables(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
-      multipliers = self.MultiPliers[tableType]
-      force_coefficients = {key: {} for key in multipliers.keys()}
-      correction_table = {key: np.zeros((len(absc1), len(absc2))) if absc2 else None for key in multipliers.keys()}
+    multipliers = self.MultiPliers[tableType]
+    force_coefficients = {key: pd.DataFrame(np.zeros((len(absc1), len(absc2))),index=absc1,columns=absc2) for key in multipliers.keys()} 
+    correction_table = {key: np.zeros((5,2)) for key in multipliers.keys()}
 
-      for ixa1, betaDEG in enumerate(absc1):
-        betad = np.radians(betaDEG)
-        for ixa2,gammaDEG in enumerate(absc2):
-          gamma = np.radians(gammaDEG)
+    for ixa1, betaDEG in enumerate(absc1):
+      betad = np.radians(betaDEG)
+      for ixa2,gammaDEG in enumerate(absc2):
+        gamma = np.radians(gammaDEG)
+        
+        pmmtyp = 1
+        SepPoint = self.SeparationPoint
+        coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
+
+        uoo = ucar
+        ucar = self.pmmcar(uoo, betad, coftyp)
+        tertiary = delta = heel = epsil = 0.0  
+        #calulate pure drift force F1 setting gamma 0.0
+        udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, 0.0, delta, heel, epsil)
+
+        toh = 0
+        uo = self.serviceSpeed
+        fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+        F1 = fdimu2
+        #calculate pure yaw F2 setting beta = 0
+        ucar = self.pmmcar(uoo, betad, coftyp)
+        udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, 0.0, gamma, delta, heel, epsil)
+        fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+        F2 = fdimu2
+        
+        #calculate combined
+        ucar = self.pmmcar(uoo, betad, coftyp)
+        udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+        fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+        FCombined = fdimu2          
+        speed_dict = self.hluref(udim, vdim, rdim, pdim)
+        # update the multipliers with speed values if they are available
+        multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}          
+        F_Yaw_Drift = FCombined - F1 - F2
+        #print(f"BETA,GAMMA {betaDEG},{gammaDEG} FCombined {FCombined[0]} F1 {F1[0]} F2 {F2[0]}")
+        
+        for key, multiplier in multipliers.items():            
+          force_coefficients[key].iloc[ixa1,ixa2] = self.getForceCoefficient(multiplier, F_Yaw_Drift[self.forceIndex[key]], utot2)  
+          idum = 0
+          if key == 'X_HL' and betaDEG == 10.0 and gammaDEG == -25.0 :
+            print(f"X_HL yaw_drift {betaDEG},{gammaDEG} = {force_coefficients[key].iloc[ixa1,ixa2]}")
+    # pack to dataFrames      
           
-          pmmtyp = 1
-          SepPoint = self.SeparationPoint
-          coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
-
-          uoo = ucar
-          ucar = self.pmmcar(uoo, betad, coftyp)
-          tertiary = delta = heel = epsil = 0.0  
-
-          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
-          speed_dict = self.hluref(udim, vdim, rdim, pdim)
-          # update the multipliers with speed values if they are available
-          multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}
-
-          toh = 0
-          uo = self.serviceSpeed
-          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-          F1 = fdimu2
-          print ('!!! Cant figure out the meaning of F1 and F2 !!!')
-          ucar = self.pmmcar(uoo, betad, coftyp)
-          udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
-          fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-          F2 = fdimu2
-          print ('!!!!!!!!!!!!!!! skipping YAW_DRIFT for now !!!!!!!!!!!!!!!!')  
-          return None,None
-          '''
-          forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
-          if icoty == 0: #BaseTable
-              for key, multiplier in multipliers.items():
-                  if key == 'K_HL':
-                    continue
-                  force_coefficients[key][dummy] = self.getForceCoefficient(multiplier, fdimu2[forceIndex[key]], utot2)
-          else: ## now we create a correction table
-              FBASE = fdimu2
-              for ix, toh in enumerate(absc2):
-                  if ix == 0:
-                      for key in correction_table.keys():
-                          correction_table[key][ixa1, ix] = 1.0
-                      continue
-                  fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-                  for key in correction_table.keys():
-                    if key == 'K_HL':
-                      continue
-                    correction_table[key][ixa1, ix] = fdimu2[forceIndex[key]] / FBASE[forceIndex[key]]
-          '''
-      return force_coefficients, correction_table    
+          
+    return force_coefficients, correction_table    
     
   def calculate_force_coefficients(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
       multipliers = self.MultiPliers[tableType]
       force_coefficients = {key: {} for key in multipliers.keys()}
       correction_table = {key: np.zeros((len(absc1), len(absc2))) if absc2 else None for key in multipliers.keys()}
-
+      forceIndex=self.forceIndex
       for ixa1, val in enumerate(absc1):
         dummy = val
         if tableType == 'DRIFT':
@@ -667,8 +666,7 @@ class HullThumbs(Thumbs.Thumbs):
         elif tableType == 'YAW':
           betad = 0
           gamma = np.radians(val)
-          if val == 26:
-            idum = 0
+
           
         pmmtyp = 1
         SepPoint = self.SeparationPoint
@@ -686,7 +684,7 @@ class HullThumbs(Thumbs.Thumbs):
         toh = 0
         uo = self.serviceSpeed
         fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
-        forceIndex={'X_HL':0,'Y_HL':1,'N_HL':2}
+        
         if icoty == 0: #BaseTable
             for key, multiplier in multipliers.items():
                 if key == 'K_HL':
@@ -1498,6 +1496,7 @@ if __name__ == '__main__':
   import matplotlib.ticker as ticker
   from mpl_toolkits.mplot3d import Axes3D
   import numpy as np  
+  import plotly.graph_objects as go
   shipDatadict={}
   shipDatadict['shipnr'] = 3949
   shipDatadict['Lpp'] = 340.5
@@ -1554,8 +1553,23 @@ if __name__ == '__main__':
   idum = 0
   pass
 # %%
-  shallow = True
-  resistanceTable = hull_Thumbs.RDHOLTROP(shallow)
+  print("***  Shallow water Schlicting ****")
+  shallowCorrection = hull_Thumbs.shallowWaterResistance()
+  sy1Data=pd.read_csv(r'H:\GitRepos\ShipYard2\data\hull\FN_TOH_SY1_result.dat',header=0,sep='\s+')  
+  sy1Data.set_index('FN',inplace=True)
+  
+  sy1_surface = go.Surface(z=sy1Data.values,x=sy1Data.index,y=sy1Data.columns, colorscale='Cividis', opacity=0.9, showscale=False)
+  sy2_surface = go.Surface(z=shallowCorrection.values, x=shallowCorrection.index, y=shallowCorrection.columns,colorscale='Viridis')
+  # Combine the surfaces into a single figure
+  fig = go.Figure(data=[sy1_surface, sy2_surface])
+  #fig = go.Figure(data=[go.Surface(z=shallowCorrection.values, x=shallowCorrection.index, y=shallowCorrection.columns)])
+  # Update layout
+  fig.update_layout(title='X_HL(FN,TOH)', autosize=False,
+                    width=500, height=500,
+                    margin=dict(l=65, r=50, b=65, t=90))
+
+  # Show the plot
+  fig.show()  
 # %%
   
   # !!! dmimix takes a bit of time !!!
@@ -1579,7 +1593,7 @@ if __name__ == '__main__':
   plt.show()
   pass    
 # %%
-  import plotly.graph_objects as go
+
   fig = go.Figure(data=[go.Surface(z=correctionTables['X_HL(BETAD,TOH)'].values, x=correctionTables['X_HL(BETAD,TOH)'].index, y=correctionTables['X_HL(BETAD,TOH)'].columns)])
   # Update layout
   fig.update_layout(title='X_HL(BETAD,TOH)', autosize=False,
@@ -1618,14 +1632,44 @@ if __name__ == '__main__':
 # %%
   
   tables = hull_Thumbs.getRollHeelTables()
-  fig,ax = plt.subplots()
+  #fig,ax = plt.subplots()
   tables['ROLL']['Y_HL'].plot()
   plt.title('ROLL')
   plt.grid()
   idum = 0
 
   # %%
-df = pd.read_csv("H:\GitRepos\ShipYard2\data\hull\YAW_DRIFT_K_HL.dat",header=0,sep='\s+')
-df.set_index('BETAD',inplace=True)
+  with open(r"H:\GitRepos\ShipYard2\data\PMMdata\3949NeuPMMDe_005_001.txt",'r') as f:
+    pmmCoefs = {}
+    for line in f:
+        splt = line.split()
+        pmmCoefs[splt[0]] = float(splt[1])/1.0E5   
+  motion = 3
+  icoty = 0                
+  uo = hull_Thumbs.serviceSpeed
+  ipmms = 1
+  tableType ='YAW_DRIFT'
+  absc1,absc2 = hull_Thumbs.defval(motion,icoty)
+  tables,correctionTables = hull_Thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
+
+  z= tables['X_HL'].values
+  x = tables['X_HL'].index
+  y = tables['X_HL'].columns
+  surface=go.Surface(z=z,x=x,y=y,contours={
+        "z": {
+            "show": True,
+            "start": np.min(z),
+            "end": np.max(z),
+            "size": 2,
+            "color": "white"
+        }})
+  fig = go.Figure(data=[surface])
+  # Update layout
+  fig.update_layout(title='YAW_DRIFT(X_HL)', autosize=False,
+                    width=500, height=500,
+                    margin=dict(l=65, r=50, b=65, t=90))
+
+  # Show the plot
+  fig.show()         
 
 # %%
