@@ -1,5 +1,3 @@
-
-
 # %%
 import numpy as np
 from scipy.constants import g
@@ -8,7 +6,11 @@ from scipy.interpolate import interp1d
 import json
 import os
 import glob
-
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.ticker as ticker
+import plotly.graph_objects as go
+import plotly.express as px
 import pandas as pd
 
 import Thumbs as Thumbs
@@ -59,9 +61,9 @@ class HullThumbs(Thumbs.Thumbs):
     
   def __init__(self,shipDataDict):
     super().__init__(shipDataDict)
-#
-# FNH values for squat calculation
-#
+    #
+    # FNH values for squat calculation
+    #
     self.FNH_values = [-1.90,-1.20,-1.10,-1.05,-1.00, 
                   -0.95,-0.90,-0.80,-0.70,-0.60,
                   -0.50,-0.40,-0.30,-0.20,-0.10, 0.00,
@@ -396,9 +398,9 @@ class HullThumbs(Thumbs.Thumbs):
     RINTP_FRUDEP = interp1d(FRUDEP,CTOTD['X_HL'].values)
 
 
-#
-#---- CALCULATION OF SHALLOW WATER RESISTANCE AND CT-H/CT-INF ----
-#
+    #
+    #---- CALCULATION OF SHALLOW WATER RESISTANCE AND CT-H/CT-INF ----
+    #
     for L in range(len(CTOTD)):
       for J in range(len(TOHARR)):
         if J == 1:
@@ -562,7 +564,7 @@ class HullThumbs(Thumbs.Thumbs):
     lpp = self.Lpp
     udim  = ucar * np.cos(-betad)
     vdim  = ucar * np.sin(-betad)
-    if (np.abs(np.abs(gamma)-1.570796) < .01) :
+    if (np.abs(np.abs(gamma)-np.pi/2.0) < .01) :
         rdim = 1.
         udim = 0.
         vdim = 0.
@@ -601,6 +603,74 @@ class HullThumbs(Thumbs.Thumbs):
     for key in multiPlier.keys():
       factor *= multiPlier[key]
     return force*utot2/factor    
+  
+  def yaw_drift_Forces(self, pmmCoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh):
+    '''
+    this function only calculate the forces from yaw and drift excluding pure yaw and pure drift
+    '''
+    acoef = self.acoef
+    bcoef = self.bcoef
+    fdim = np.array([0., 0., 0.])
+    fdimu2 = np.array([0., 0., 0.])
+    lpp = self.Lpp
+    utot2 = udim*udim + vdim*vdim if coftyp == 1 else 1.
+    utot = np.sqrt(utot2)
+    U = (udim - uo)/utot if coftyp == 1 else udim
+    V = vdim/utot if coftyp == 1 else vdim
+    R = rdim/(utot/lpp) if coftyp == 1 else rdim*lpp
+    
+    derivatives = ['XVR']
+    if V != 0 and R != 0:
+      idum = 0
+    fdimu2[0] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**2
+    fdim[0] = fdimu2[0]*utot2
+
+    derivatives = ['YRIVI', 'YRVV', 'YVIRI', 'YVRR']
+    fdimu2[1] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**2
+    fdim[1] = fdimu2[1]*utot2
+
+    derivatives = [ 'NRIVI', 'NRVV', 'NVIRI', 'NVRR']
+    fdimu2[2] = self.calculate_PMM_force(derivatives, pmmCoefs, acoef, bcoef, U, V, R, toh) * 0.5 * self.rho * lpp**3
+    fdim[2] = fdimu2[2]*utot2
+
+    return fdim, fdimu2, utot2
+      
+  def yaw_drift_TablesV1(self, motion, tableType, absc1, absc2, icoty, uo, pmmCoefs):
+    '''
+    Calculates the yaw and drift tables by only calculating the forces from the yar drift
+    coefficients
+    '''
+    multipliers = self.MultiPliers[tableType]
+    force_coefficients = {key: pd.DataFrame(np.zeros((len(absc1), len(absc2))),index=absc1,columns=absc2) for key in multipliers.keys()} 
+    correction_table = {key: np.zeros((5,2)) for key in multipliers.keys()}
+
+    for ixa1, betaDEG in enumerate(absc1):
+      betad = np.radians(betaDEG)
+      for ixa2,gammaDEG in enumerate(absc2):
+        gamma = np.radians(gammaDEG)
+        
+        pmmtyp = 1
+        SepPoint = self.SeparationPoint
+        coftyp, ucar = self.pmmmsm(uo, betad, gamma, pmmtyp, SepPoint)
+
+        uoo = ucar
+        ucar = self.pmmcar(uoo, betad, coftyp)
+        tertiary = delta = heel = epsil = 0.0  
+        #calulate pure drift force F1 setting gamma 0.0
+        udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, gamma, delta, heel, epsil)
+
+        toh = 0
+        uo = self.serviceSpeed
+        fdim, fdimu2, utot2  = self.yaw_drift_Forces(pmmCoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
+        F_Yaw_Drift = fdimu2
+        
+        for key, multiplier in multipliers.items():            
+          force_coefficients[key].iloc[ixa1,ixa2] = self.getForceCoefficient(multiplier, F_Yaw_Drift[self.forceIndex[key]], utot2)  
+          idum = 0
+          if key == 'X_HL' and betaDEG == 10.0 and gammaDEG == -25.0 :
+            print(f"X_HL yaw_drift {betaDEG},{gammaDEG} = {force_coefficients[key].iloc[ixa1,ixa2]}")
+    return force_coefficients, correction_table        
+
     
   def yaw_drift_Tables(self, motion, tableType, absc1, absc2, icoty, uo, pmmcoefs):
     multipliers = self.MultiPliers[tableType]
@@ -621,7 +691,6 @@ class HullThumbs(Thumbs.Thumbs):
         tertiary = delta = heel = epsil = 0.0  
         #calulate pure drift force F1 setting gamma 0.0
         udim, vdim, rdim, qdim, pdim, ddim = self.pmmmot(ucar, betad, 0.0, delta, heel, epsil)
-
         toh = 0
         uo = self.serviceSpeed
         fdim, fdimu2, utot2 = self.pmmfor(pmmcoefs, coftyp, uo, udim, vdim, rdim, qdim, pdim, ddim, toh)
@@ -641,6 +710,9 @@ class HullThumbs(Thumbs.Thumbs):
         # update the multipliers with speed values if they are available
         multipliers = {key: self.updateMultiplierWithActualSpeed(value, speed_dict) for key, value in multipliers.items()}          
         F_Yaw_Drift = FCombined - F1 - F2
+        if np.abs(betaDEG) >= 90.0:  
+          F_Yaw_Drift = np.array([0. , 0., 0.])
+          
         #print(f"BETA,GAMMA {betaDEG},{gammaDEG} FCombined {FCombined[0]} F1 {F1[0]} F2 {F2[0]}")
         
         for key, multiplier in multipliers.items():            
@@ -1329,7 +1401,7 @@ class HullThumbs(Thumbs.Thumbs):
       idof  =  2
 #cbla   see also 'cbla comment number001'.
     if motion == 3 and icoty == 0:
-      absc1 =[-180.0,-165.0, -90.0, -25.0, -22.0,-20.0, -10.0 -5.0, -2.0,
+      absc1 =[-180.0,-165.0, -90.0, -25.0, -22.0,-20.0, -10.0, -5.0, -2.0,
                 0.0, 2.0,5.0,10.0,20.0,22.0,25.0,90.0,165.0,180.0]
       ndef1 = len(absc1)
       absc2= [-90.0, -25.0, -20.0, -15.0, -10.0,  -5.0,  -2.0,   
@@ -1492,11 +1564,7 @@ class HullThumbs(Thumbs.Thumbs):
 # %%
 
 if __name__ == '__main__':
-  import matplotlib.pyplot as plt
-  import matplotlib.ticker as ticker
-  from mpl_toolkits.mplot3d import Axes3D
-  import numpy as np  
-  import plotly.graph_objects as go
+
   shipDatadict={}
   shipDatadict['shipnr'] = 3949
   shipDatadict['Lpp'] = 340.5
@@ -1634,8 +1702,8 @@ if __name__ == '__main__':
   tables = hull_Thumbs.getRollHeelTables()
   #fig,ax = plt.subplots()
   tables['ROLL']['Y_HL'].plot()
-  plt.title('ROLL')
-  plt.grid()
+  
+  #plt.grid()
   idum = 0
 
   # %%
@@ -1651,7 +1719,7 @@ if __name__ == '__main__':
   tableType ='YAW_DRIFT'
   absc1,absc2 = hull_Thumbs.defval(motion,icoty)
   tables,correctionTables = hull_Thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
-
+  dfv0 = tables['X_HL']
   z= tables['X_HL'].values
   x = tables['X_HL'].index
   y = tables['X_HL'].columns
@@ -1672,4 +1740,26 @@ if __name__ == '__main__':
   # Show the plot
   fig.show()         
 
+
 # %%
+  dfsy1 = pd.read_csv(r"H:\GitRepos\ShipYard2\test\testData\SY13949YAW_DRIFT_X_HL.dat",header=0,sep='\s+')
+  dfsy1.set_index('BETAD',inplace=True)
+  dfsy1long = dfsy1.reset_index().melt(id_vars='BETAD')
+  dfsy1long.columns = ['BETAD', 'GAMMA', 'Value']
+  # Plot using plotly
+  fig = px.line(dfsy1long, x='GAMMA', y='Value', color='BETAD', title='SY1 YAW_DRIFT_X_HL')
+  fig.show()
+  # %%
+  # Convert the row to a DataFrame
+  #row = dfv1.loc[25.0]
+  #row_df = row.to_frame().T
+  #fig = go.Figure()
+  #factorV1 = dfsy1.loc[25.0]['-25']/row_df.loc[25.0][-25.0]
+
+  #fig.add_trace(go.Scatter(x=row_df.columns, y=factorV1*row_df.loc[25.0],mode='lines+markers',  name='pySY2_V1'))
+  fig.add_trace(go.Scatter(x=dfsy1.loc[25.0].index, y=dfsy1.loc[25.0].values, mode='lines+markers', name='SY1'))
+  fig.add_trace(go.Scatter(x=dfv0.loc[25.0].index,y=dfv0.loc[25.0].values,mode='lines+markers', name='pySY2_V0'))
+  # Add a title
+  fig.update_layout(title='Comparison of pySY2 and SY1 at Index 25.0')
+  fig.show()
+

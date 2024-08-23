@@ -1,13 +1,19 @@
 # %%
 import unittest
-
-import numpy as np
-import math
 import sys
-import matplotlib.pyplot as plt
+import numpy as np
+from scipy.constants import g
+from scipy.optimize import fmin_bfgs,minimize
 from scipy.interpolate import interp1d
+import json
 import os
+import glob
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.ticker as ticker
 import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
@@ -195,8 +201,10 @@ class TestHullThumbs(unittest.TestCase):
         tableType ='YAW_DRIFT'
         absc1,absc2 = self.hull_thumbs.defval(motion,icoty)
         tables,correctionTables = self.hull_thumbs.yaw_drift_Tables(motion, tableType, absc1, absc2, icoty, uo, pmmCoefs)
-        np.testing.assert_allclose(tables['X_HL'].loc[5.0][25.0],-0.0067560576097454,rtol=0.001)
-        
+        dfsy1 = pd.read_csv(r"H:\GitRepos\ShipYard2\test\testData\SY13949YAW_DRIFT_X_HL.dat",header=0,sep='\s+')
+        dfsy1.set_index('BETAD',inplace=True)        
+        np.testing.assert_allclose(tables['X_HL'].loc[5.0][25.0]-dfsy1.loc[5.0]['25'],0.00,rtol=0.01,atol=1e-9)
+
         pass
     def test_getRollHeelTables(self):
         tables = self.hull_thumbs.getRollHeelTables()
